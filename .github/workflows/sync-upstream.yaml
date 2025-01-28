@@ -1,3 +1,17 @@
+# This workflow syncs our Sumwall's FOSS forked repositories with theirs upstream repos, not only
+# syncs the commits but also the TAGs.
+#
+#  We have created an universal workflow that is valid for almost any type of repository. On some
+# repos there are workflows already created, and using the default's secrets.GITHUB_TOKEN is NOT
+# enough. So, we are using the variable ${{ secrets.SUMWALL_DEVOPS_TOKEN }} if present in the
+# repository that has also the 'workflows:write' permission.
+#
+# So, if you install this workflow in a repository that has workflows under .github/workflows then you
+# need to use the the avobe variable. This is done by installing it in the forked repo, as
+# explain down in Step 1.
+#
+# Note that the full Secret is not copied below, please ask the DevOps team to give you the token.
+#
 name: Sync with Upstream
 
 on:
@@ -18,7 +32,6 @@ jobs:
     steps:
       # Step 1: Checkout your fork repository
       #
-      # We are using the variable ${{ secrets.SUMWALL_DEVOPS_TOKEN }}
       # 1. I created this token from SW-Luis-Palacios > Settings > Developer Settings > PAT > Classic
       #    Name: "PAT SW-Luis-Palacios classic runners" No expiration
       #    Permission: admin:org
@@ -34,7 +47,8 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0 # Fetch all history for tags and branches
-          token: ${{ secrets.SUMWALL_DEVOPS_TOKEN }} # Fine-grained PAT with contents:write and workflows:write
+          # Use SUMWALL_DEVOPS_TOKEN if available, fallback to GITHUB_TOKEN
+          token: ${{ secrets.SUMWALL_DEVOPS_TOKEN || secrets.GITHUB_TOKEN }}
 
       # Step 2: Configure Git Identity
       - name: Configure Git Identity
