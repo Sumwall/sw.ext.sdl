@@ -17,10 +17,24 @@ jobs:
 
     steps:
       # Step 1: Checkout your fork repository
+      #
+      # We are using the variable ${{ secrets.SUMWALL_DEVOPS_TOKEN }}
+      # 1. I created this token from SW-Luis-Palacios > Settings > Developer Settings > PAT > Classic
+      #    Name: "PAT SW-Luis-Palacios classic runners" No expiration
+      #    Permission: admin:org
+      #    Token starts with: ghp_ZAW2...
+      # 2. Added that token to "Actions secrets and variables" under each repository
+      #    that wants to use this PAT:
+      #   https://github.com/Sumwall/<repository>/settings/secrets/actions
+      #    New repository secret
+      #     Name: SUMWALL_DEVOPS_TOKEN
+      #     Secret: ghp_ZAW2...
+      #
       - name: Checkout Fork
         uses: actions/checkout@v3
         with:
           fetch-depth: 0 # Fetch all history for tags and branches
+          token: ${{ secrets.SUMWALL_DEVOPS_TOKEN }} # Fine-grained PAT with contents:write and workflows:write
 
       # Step 2: Configure Git Identity
       - name: Configure Git Identity
@@ -69,6 +83,6 @@ jobs:
       - name: Push Changes to Fork
         run: |
           # Use the PAT for authentication in the remote URL
-          git remote set-url origin https://${{ secrets.SUMWALL_DEVOPS_TOKEN }}@github.com/${{ github.repository }}
+          # git remote set-url origin https://${{ secrets.SUMWALL_DEVOPS_TOKEN }}@github.com/${{ github.repository }}
           git push origin ${{ steps.get-upstream.outputs.branch }}
           git push origin --tags
