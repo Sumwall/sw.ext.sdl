@@ -79,10 +79,9 @@ jobs:
           git checkout ${{ steps.get-upstream.outputs.branch }}
           git merge upstream/${{ steps.get-upstream.outputs.branch }} || echo "No new changes to merge."
 
-      # Step 7: Push changes to our fork using a custom PAT
+      # Step 7: Push changes to our fork
       - name: Push Changes to Fork
         run: |
-          # Use the PAT for authentication in the remote URL
-          # git remote set-url origin https://${{ secrets.SUMWALL_DEVOPS_TOKEN }}@github.com/${{ github.repository }}
+          # Push to origin
           git push origin ${{ steps.get-upstream.outputs.branch }}
           git push origin --tags
