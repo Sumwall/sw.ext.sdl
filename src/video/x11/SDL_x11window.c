@@ -100,6 +100,14 @@ static bool X11_IsWindowMapped(SDL_VideoDevice *_this, SDL_Window *window)
     }
 }
 
+static bool X11_IsDisplayOk(Display *display)
+{
+    if (display->flags & XlibDisplayIOError) {
+        return false;
+    }
+    return true;
+}
+
 #if 0
 static bool X11_IsActionAllowed(SDL_Window *window, Atom action)
 {
@@ -1065,8 +1073,12 @@ void X11_UpdateWindowPosition(SDL_Window *window, bool use_current_position)
                                   &data->expected.x, &data->expected.y);
 
     // Attempt to move the window
-    data->pending_operation |= X11_PENDING_OP_MOVE;
-    X11_XMoveWindow(display, data->xwindow, data->expected.x, data->expected.y);
+    if (window->flags & SDL_WINDOW_HIDDEN) {
+        window->internal->pending_position = true;
+    } else {
+        data->pending_operation |= X11_PENDING_OP_MOVE;
+        X11_XMoveWindow(display, data->xwindow, data->expected.x, data->expected.y);
+    }
 }
 
 bool X11_SetWindowPosition(SDL_VideoDevice *_this, SDL_Window *window)
@@ -1449,7 +1461,7 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
         /* Blocking wait for "MapNotify" event.
          * We use X11_XIfEvent because pXWindowEvent takes a mask rather than a type,
          * and XCheckTypedWindowEvent doesn't block */
-        if (!(window->flags & SDL_WINDOW_EXTERNAL)) {
+        if (!(window->flags & SDL_WINDOW_EXTERNAL) && X11_IsDisplayOk(display)) {
             X11_XIfEvent(display, &event, &isMapNotify, (XPointer)&data->xwindow);
         }
         X11_XFlush(display);
@@ -1503,7 +1515,7 @@ void X11_HideWindow(SDL_VideoDevice *_this, SDL_Window *window)
     if (X11_IsWindowMapped(_this, window)) {
         X11_XWithdrawWindow(display, data->xwindow, screen);
         // Blocking wait for "UnmapNotify" event
-        if (!(window->flags & SDL_WINDOW_EXTERNAL)) {
+        if (!(window->flags & SDL_WINDOW_EXTERNAL) && X11_IsDisplayOk(display)) {
             X11_XIfEvent(display, &event, &isUnmapNotify, (XPointer)&data->xwindow);
         }
         X11_XFlush(display);
