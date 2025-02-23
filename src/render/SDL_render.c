@@ -1281,7 +1281,19 @@ static SDL_PixelFormat GetClosestSupportedFormat(SDL_Renderer *renderer, SDL_Pix
 {
     int i;
 
-    if (SDL_ISPIXELFORMAT_FOURCC(format)) {
+    if (format == SDL_PIXELFORMAT_MJPG) {
+        // We'll decode to SDL_PIXELFORMAT_NV12 or SDL_PIXELFORMAT_RGBA32
+        for (i = 0; i < renderer->num_texture_formats; ++i) {
+            if (renderer->texture_formats[i] == SDL_PIXELFORMAT_NV12) {
+                return renderer->texture_formats[i];
+            }
+        }
+        for (i = 0; i < renderer->num_texture_formats; ++i) {
+            if (renderer->texture_formats[i] == SDL_PIXELFORMAT_RGBA32) {
+                return renderer->texture_formats[i];
+            }
+        }
+    } else if (SDL_ISPIXELFORMAT_FOURCC(format)) {
         // Look for an exact match
         for (i = 0; i < renderer->num_texture_formats; ++i) {
             if (renderer->texture_formats[i] == format) {
@@ -1410,11 +1422,15 @@ SDL_Texture *SDL_CreateTextureWithProperties(SDL_Renderer *renderer, SDL_Propert
             closest_format = renderer->texture_formats[0];
         }
 
-        default_colorspace = SDL_GetDefaultColorspaceForFormat(closest_format);
-        if (SDL_COLORSPACETYPE(texture->colorspace) == SDL_COLORSPACETYPE(default_colorspace)) {
-            SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, texture->colorspace);
+        if (format == SDL_PIXELFORMAT_MJPG && closest_format == SDL_PIXELFORMAT_NV12) {
+            SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, SDL_COLORSPACE_JPEG);
         } else {
-            SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, default_colorspace);
+            default_colorspace = SDL_GetDefaultColorspaceForFormat(closest_format);
+            if (SDL_COLORSPACETYPE(texture->colorspace) == SDL_COLORSPACETYPE(default_colorspace)) {
+                SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, texture->colorspace);
+            } else {
+                SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_COLORSPACE_NUMBER, default_colorspace);
+            }
         }
         SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_FORMAT_NUMBER, closest_format);
         SDL_SetNumberProperty(native_props, SDL_PROP_TEXTURE_CREATE_ACCESS_NUMBER, texture->access);
@@ -1443,7 +1459,9 @@ SDL_Texture *SDL_CreateTextureWithProperties(SDL_Renderer *renderer, SDL_Propert
         texture->next = texture->native;
         renderer->textures = texture;
 
-        if (SDL_ISPIXELFORMAT_FOURCC(texture->format)) {
+        if (texture->format == SDL_PIXELFORMAT_MJPG) {
+            // We have a custom decode + upload path for this
+        } else if (SDL_ISPIXELFORMAT_FOURCC(texture->format)) {
 #ifdef SDL_HAVE_YUV
             texture->yuv = SDL_SW_CreateYUVTexture(texture->format, texture->colorspace, w, h);
 #else
@@ -2787,7 +2805,7 @@ static void SDL_RenderLogicalPresentation(SDL_Renderer *renderer)
     }
 }
 
-static bool SDL_RenderVectorFromWindow(SDL_Renderer *renderer, float window_dx, float window_dy, float *restrict dx, float *restrict dy)
+static bool SDL_RenderVectorFromWindow(SDL_Renderer *renderer, float window_dx, float window_dy, float *dx, float *dy)
 {
     // Convert from window coordinates to pixels within the window
     window_dx *= renderer->dpi_scale.x;
@@ -5214,6 +5232,10 @@ void SDL_DestroyRendererWithoutFreeing(SDL_Renderer *renderer)
         SDL_RemoveWindowRenderer(renderer->window, renderer);
     }
 
+    if (renderer->software) {
+        // Make sure all drawing to a surface is complete
+        FlushRenderCommands(renderer);
+    }
     SDL_DiscardAllCommands(renderer);
 
     if (renderer->debug_char_texture_atlas) {
