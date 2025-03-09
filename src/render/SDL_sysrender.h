@@ -34,6 +34,7 @@ extern "C" {
 
 typedef enum SDL_TextureAddressMode
 {
+    SDL_TEXTURE_ADDRESS_INVALID = -1,
     SDL_TEXTURE_ADDRESS_AUTO,
     SDL_TEXTURE_ADDRESS_CLAMP,
     SDL_TEXTURE_ADDRESS_WRAP,
@@ -155,6 +156,7 @@ typedef struct SDL_RenderCommand
             SDL_FColor color;
             SDL_BlendMode blend;
             SDL_Texture *texture;
+            SDL_ScaleMode texture_scale_mode;
             SDL_TextureAddressMode texture_address_mode;
         } draw;
         struct
@@ -224,7 +226,6 @@ struct SDL_Renderer
     bool (*LockTexture)(SDL_Renderer *renderer, SDL_Texture *texture,
                        const SDL_Rect *rect, void **pixels, int *pitch);
     void (*UnlockTexture)(SDL_Renderer *renderer, SDL_Texture *texture);
-    void (*SetTextureScaleMode)(SDL_Renderer *renderer, SDL_Texture *texture, SDL_ScaleMode scaleMode);
     bool (*SetRenderTarget)(SDL_Renderer *renderer, SDL_Texture *texture);
     SDL_Surface *(*RenderReadPixels)(SDL_Renderer *renderer, const SDL_Rect *rect);
     bool (*RenderPresent)(SDL_Renderer *renderer);
@@ -263,6 +264,9 @@ struct SDL_Renderer
 
     // The method of drawing lines
     SDL_RenderLineMethod line_method;
+
+    // Default scale mode for textures created with this renderer
+    SDL_ScaleMode scale_mode;
 
     // The list of textures
     SDL_Texture *textures;
