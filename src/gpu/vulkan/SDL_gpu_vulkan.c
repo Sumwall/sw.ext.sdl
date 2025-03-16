@@ -33,8 +33,6 @@
 
 #include "../SDL_sysgpu.h"
 
-#define VULKAN_INTERNAL_clamp(val, min, max) SDL_max(min, SDL_min(val, max))
-
 // Global Vulkan Loader Entry Points
 
 static PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = NULL;
@@ -78,33 +76,6 @@ typedef struct VulkanExtensions
         VK_COMPONENT_SWIZZLE_IDENTITY, \
         VK_COMPONENT_SWIZZLE_IDENTITY  \
     }
-
-#define NULL_DESC_LAYOUT     (VkDescriptorSetLayout)0
-#define NULL_PIPELINE_LAYOUT (VkPipelineLayout)0
-#define NULL_RENDER_PASS     (SDL_GPURenderPass *)0
-
-#define EXPAND_ELEMENTS_IF_NEEDED(arr, initialValue, type) \
-    do {                                                   \
-        if (arr->count == arr->capacity) {                 \
-            if (arr->capacity == 0) {                      \
-                arr->capacity = initialValue;              \
-            } else {                                       \
-                arr->capacity *= 2;                        \
-            }                                              \
-            arr->elements = (type *)SDL_realloc(           \
-                arr->elements,                             \
-                arr->capacity * sizeof(type));             \
-        }                                                  \
-    } while (0)
-
-#define MOVE_ARRAY_CONTENTS_AND_RESET(i, dstArr, dstCount, srcArr, srcCount) \
-    do {                                                                     \
-        for ((i) = 0; (i) < (srcCount); (i) += 1) {                          \
-            (dstArr)[i] = (srcArr)[i];                                       \
-        }                                                                    \
-        (dstCount) = (srcCount);                                             \
-        (srcCount) = 0;                                                      \
-    while (0)
 
 // Conversions
 
@@ -606,7 +577,7 @@ typedef struct VulkanSampler
 typedef struct VulkanShader
 {
     VkShaderModule shaderModule;
-    const char *entrypointName;
+    char *entrypointName;
     SDL_GPUShaderStage stage;
     Uint32 numSamplers;
     Uint32 numStorageTextures;
@@ -1321,7 +1292,6 @@ static inline Uint32 VULKAN_INTERNAL_NextHighestAlignment32(
 }
 
 static void VULKAN_INTERNAL_MakeMemoryUnavailable(
-    VulkanRenderer *renderer,
     VulkanMemoryAllocation *allocation)
 {
     Uint32 i, j;
@@ -1371,7 +1341,6 @@ static void VULKAN_INTERNAL_MarkAllocationsForDefrag(
                     renderer->allocationsToDefragCount += 1;
 
                     VULKAN_INTERNAL_MakeMemoryUnavailable(
-                        renderer,
                         currentAllocator->allocations[allocationIndex]);
                 }
             }
@@ -1787,8 +1756,6 @@ static void VULKAN_INTERNAL_DeallocateMemory(
 
 static Uint8 VULKAN_INTERNAL_AllocateMemory(
     VulkanRenderer *renderer,
-    VkBuffer buffer,
-    VkImage image,
     Uint32 memoryTypeIndex,
     VkDeviceSize allocationSize,
     Uint8 isHostVisible,
@@ -2069,8 +2036,6 @@ static Uint8 VULKAN_INTERNAL_BindResourceMemory(
 
     allocationResult = VULKAN_INTERNAL_AllocateMemory(
         renderer,
-        buffer,
-        image,
         memoryTypeIndex,
         allocationSize,
         isHostVisible,
@@ -2367,24 +2332,6 @@ static Uint8 VULKAN_INTERNAL_BindMemoryForBuffer(
 
 // Resource tracking
 
-#define ADD_TO_ARRAY_UNIQUE(resource, type, array, count, capacity) \
-    Uint32 i;                                                       \
-                                                                    \
-    for (i = 0; i < commandBuffer->count; i += 1) {                 \
-        if (commandBuffer->array[i] == resource) {                  \
-            return;                                                 \
-        }                                                           \
-    }                                                               \
-                                                                    \
-    if (commandBuffer->count == commandBuffer->capacity) {          \
-        commandBuffer->capacity += 1;                               \
-        commandBuffer->array = SDL_realloc(                         \
-            commandBuffer->array,                                   \
-            commandBuffer->capacity * sizeof(type));                \
-    }                                                               \
-    commandBuffer->array[commandBuffer->count] = resource;          \
-    commandBuffer->count += 1;
-
 #define TRACK_RESOURCE(resource, type, array, count, capacity)  \
     for (Sint32 i = commandBuffer->count - 1; i >= 0; i -= 1) { \
         if (commandBuffer->array[i] == resource) {              \
@@ -2463,7 +2410,6 @@ static void VULKAN_INTERNAL_TrackComputePipeline(
 }
 
 static void VULKAN_INTERNAL_TrackFramebuffer(
-    VulkanRenderer *renderer,
     VulkanCommandBuffer *commandBuffer,
     VulkanFramebuffer *framebuffer)
 {
@@ -3169,7 +3115,7 @@ static void VULKAN_INTERNAL_DestroyShader(
         vulkanShader->shaderModule,
         NULL);
 
-    SDL_free((void *)vulkanShader->entrypointName);
+    SDL_free(vulkanShader->entrypointName);
     SDL_free(vulkanShader);
 }
 
@@ -5982,7 +5928,6 @@ static VulkanTextureSubresource *VULKAN_INTERNAL_PrepareTextureSubresourceForWri
 
 static VkRenderPass VULKAN_INTERNAL_CreateRenderPass(
     VulkanRenderer *renderer,
-    VulkanCommandBuffer *commandBuffer,
     const SDL_GPUColorTargetInfo *colorTargetInfos,
     Uint32 numColorTargets,
     const SDL_GPUDepthStencilTargetInfo *depthStencilTargetInfo)
@@ -6675,7 +6620,6 @@ static SDL_GPUShader *VULKAN_CreateShader(
     VkResult vulkanResult;
     VkShaderModuleCreateInfo vkShaderModuleCreateInfo;
     VulkanRenderer *renderer = (VulkanRenderer *)driverData;
-    size_t entryPointNameLength;
 
     vulkanShader = SDL_malloc(sizeof(VulkanShader));
     vkShaderModuleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -6695,10 +6639,11 @@ static SDL_GPUShader *VULKAN_CreateShader(
         CHECK_VULKAN_ERROR_AND_RETURN(vulkanResult, vkCreateShaderModule, NULL);
     }
 
-    entryPointNameLength = SDL_strlen(createinfo->entrypoint) + 1;
-    vulkanShader->entrypointName = SDL_malloc(entryPointNameLength);
-    SDL_utf8strlcpy((char *)vulkanShader->entrypointName, createinfo->entrypoint, entryPointNameLength);
-
+    const char *entrypoint = createinfo->entrypoint;
+    if (!entrypoint) {
+        entrypoint = "main";
+    }
+    vulkanShader->entrypointName = SDL_strdup(entrypoint);
     vulkanShader->stage = createinfo->stage;
     vulkanShader->numSamplers = createinfo->num_samplers;
     vulkanShader->numStorageTextures = createinfo->num_storage_textures;
@@ -7041,7 +6986,6 @@ static void VULKAN_ReleaseGraphicsPipeline(
 
 static VkRenderPass VULKAN_INTERNAL_FetchRenderPass(
     VulkanRenderer *renderer,
-    VulkanCommandBuffer *commandBuffer,
     const SDL_GPUColorTargetInfo *colorTargetInfos,
     Uint32 numColorTargets,
     const SDL_GPUDepthStencilTargetInfo *depthStencilTargetInfo)
@@ -7096,7 +7040,6 @@ static VkRenderPass VULKAN_INTERNAL_FetchRenderPass(
 
     renderPassHandle = VULKAN_INTERNAL_CreateRenderPass(
         renderer,
-        commandBuffer,
         colorTargetInfos,
         numColorTargets,
         depthStencilTargetInfo);
@@ -7779,7 +7722,6 @@ static void VULKAN_BeginRenderPass(
 
     renderPass = VULKAN_INTERNAL_FetchRenderPass(
         renderer,
-        vulkanCommandBuffer,
         colorTargetInfos,
         numColorTargets,
         depthStencilTargetInfo);
@@ -7801,7 +7743,7 @@ static void VULKAN_BeginRenderPass(
         return;
     }
 
-    VULKAN_INTERNAL_TrackFramebuffer(renderer, vulkanCommandBuffer, framebuffer);
+    VULKAN_INTERNAL_TrackFramebuffer(vulkanCommandBuffer, framebuffer);
 
     // Set clear values
 

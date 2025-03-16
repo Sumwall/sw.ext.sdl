@@ -711,8 +711,6 @@ extern "C" {
  *
  * This hint only applies to the emscripten platform.
  *
- * The default value is "#canvas"
- *
  * This hint should be set before creating a window.
  *
  * \since This hint is available since SDL 3.2.0.
@@ -726,7 +724,7 @@ extern "C" {
  *
  * The variable can be one of:
  *
- * - "#window": the javascript window object (default)
+ * - "#window": the javascript window object
  * - "#document": the javascript document object
  * - "#screen": the javascript window.screen object
  * - "#canvas": the WebGL canvas element
@@ -3406,6 +3404,26 @@ extern "C" {
  * \since This hint is available since SDL 3.2.0.
  */
 #define SDL_HINT_VIDEO_MAC_FULLSCREEN_MENU_VISIBILITY "SDL_VIDEO_MAC_FULLSCREEN_MENU_VISIBILITY"
+
+/**
+ * A variable controlling whether SDL will attempt to automatically set the
+ * destination display to a mode most closely matching that of the previous
+ * display if an exclusive fullscreen window is moved onto it.
+ *
+ * The variable can be set to the following values:
+ *
+ * - "0": SDL will not attempt to automatically set a matching mode on the
+ *   destination display. If an exclusive fullscreen window is moved to a new
+ *   display, the window will become fullscreen desktop.
+ * - "1": SDL will attempt to automatically set a mode on the destination
+ *   display that most closely matches the mode of the display that the
+ *   exclusive fullscreen window was previously on. (default)
+ *
+ * This hint can be set anytime.
+ *
+ * \since This hint is available since SDL 3.4.0.
+ */
+#define SDL_HINT_VIDEO_MATCH_EXCLUSIVE_MODE_ON_MOVE "SDL_VIDEO_MATCH_EXCLUSIVE_MODE_ON_MOVE"
 
 /**
  * A variable controlling whether fullscreen windows are minimized when they
