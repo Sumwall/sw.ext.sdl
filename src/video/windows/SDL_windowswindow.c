@@ -188,14 +188,11 @@ static DWORD GetWindowStyleEx(SDL_Window *window)
 static ITaskbarList3 *GetTaskbarList(SDL_Window* window)
 {
     const SDL_WindowData *data = window->internal;
-    if (!data->videodata->taskbar_button_created) {
-        WIN_SetError("Missing taskbar button");
-        return NULL;
-    }
+    SDL_assert(data->taskbar_button_created);
     if (!data->videodata->taskbar_list) {
         HRESULT ret = CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_ALL, &IID_ITaskbarList3, (LPVOID *)&data->videodata->taskbar_list);
         if (FAILED(ret)) {
-            WIN_SetError("Unable to create taskbar list");
+            WIN_SetErrorFromHRESULT("Unable to create taskbar list", ret);
             return NULL;
         }
         ITaskbarList3 *taskbarlist = data->videodata->taskbar_list;
@@ -203,7 +200,7 @@ static ITaskbarList3 *GetTaskbarList(SDL_Window* window)
         if (FAILED(ret)) {
             taskbarlist->lpVtbl->Release(taskbarlist);
             data->videodata->taskbar_list = NULL;
-            WIN_SetError("Unable to initialize taskbar list");
+            WIN_SetErrorFromHRESULT("Unable to initialize taskbar list", ret);
             return NULL;
         }
     }
@@ -2248,18 +2245,21 @@ bool WIN_FlashWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_FlashOperat
     return true;
 }
 
-bool WIN_SetWindowProgressState(SDL_VideoDevice *_this, SDL_Window *window, SDL_ProgressState state)
+bool WIN_ApplyWindowProgress(SDL_VideoDevice *_this, SDL_Window* window)
 {
-#ifndef HAVE_SHOBJIDL_CORE_H
-    return false;
-#else
+#ifdef HAVE_SHOBJIDL_CORE_H
+    SDL_WindowData *data = window->internal;
+    if (!data->taskbar_button_created) {
+        return true;
+    }
+
     ITaskbarList3 *taskbar_list = GetTaskbarList(window);
     if (!taskbar_list) {
         return false;
-    };
+    }
 
     TBPFLAG tbpFlags;
-    switch (state) {
+    switch (window->progress_state) {
     case SDL_PROGRESS_STATE_NONE:
         tbpFlags = TBPF_NOPROGRESS;
         break;
@@ -2276,36 +2276,22 @@ bool WIN_SetWindowProgressState(SDL_VideoDevice *_this, SDL_Window *window, SDL_
         tbpFlags = TBPF_ERROR;
         break;
     default:
-        return SDL_Unsupported();
+        return SDL_SetError("Parameter 'state' is not supported");
     }
 
-    HRESULT ret = taskbar_list->lpVtbl->SetProgressState(taskbar_list, window->internal->hwnd, tbpFlags);
+    HRESULT ret = taskbar_list->lpVtbl->SetProgressState(taskbar_list, data->hwnd, tbpFlags);
     if (FAILED(ret)) {
         return WIN_SetErrorFromHRESULT("ITaskbarList3::SetProgressState()", ret);
     }
 
-    return true;
-#endif // HAVE_SHOBJIDL_CORE_H
-}
-
-bool WIN_SetWindowProgressValue(SDL_VideoDevice *_this, SDL_Window *window, float value)
-{
-#ifndef HAVE_SHOBJIDL_CORE_H
-    return false;
-#else
-    ITaskbarList3 *taskbar_list = GetTaskbarList(window);
-    if (!taskbar_list) {
-        return false;
-    };
-
-    SDL_clamp(value, 0.0f, 1.f);
-    HRESULT ret = taskbar_list->lpVtbl->SetProgressValue(taskbar_list, window->internal->hwnd, (ULONGLONG)(value * 10000.f), 10000);
-    if (FAILED(ret)) {
-        return WIN_SetErrorFromHRESULT("ITaskbarList3::SetProgressValue()", ret);
+    if (window->progress_state >= SDL_PROGRESS_STATE_NORMAL) {
+        ret = taskbar_list->lpVtbl->SetProgressValue(taskbar_list, data->hwnd, (ULONGLONG)(window->progress_value * 10000.f), 10000);
+        if (FAILED(ret)) {
+            return WIN_SetErrorFromHRESULT("ITaskbarList3::SetProgressValue()", ret);
+        }
     }
-
+#endif
     return true;
-#endif  // HAVE_SHOBJIDL_CORE_H
 }
 
 void WIN_ShowWindowSystemMenu(SDL_Window *window, int x, int y)
