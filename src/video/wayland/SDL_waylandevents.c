@@ -221,7 +221,6 @@ static Uint64 Wayland_EventTimestampMSToNS(Uint32 wl_timestamp_ms)
         timestamp_offset += SDL_MS_TO_NS(SDL_UINT64_C(0x100000000));
     }
     last = wl_timestamp_ms;
-    wl_timestamp_ms += timestamp_offset;
 
     return SDL_MS_TO_NS(wl_timestamp_ms) + timestamp_offset;
 }
@@ -309,6 +308,15 @@ void Wayland_DisplayInitCursorShapeManager(SDL_VideoData *display)
 static bool keyboard_repeat_handle(SDL_WaylandKeyboardRepeat *repeat_info, Uint64 elapsed)
 {
     bool ret = false;
+
+    /* Cap the elapsed time to something sane in case the compositor sends a bad timestamp,
+     * which can result it in it looking like the key has been pressed for a *very* long time,
+     * bringing everything to a halt while it tries to enqueue all the repeat events.
+     *
+     * 3 seconds seems reasonable.
+     */
+    elapsed = SDL_min(elapsed, SDL_MS_TO_NS(3000));
+
     while (elapsed >= repeat_info->next_repeat_ns) {
         if (repeat_info->scancode != SDL_SCANCODE_UNKNOWN) {
             const Uint64 timestamp = repeat_info->wl_press_time_ns + repeat_info->next_repeat_ns;
@@ -345,7 +353,7 @@ static void keyboard_repeat_set(SDL_WaylandKeyboardRepeat *repeat_info, Uint32 k
     repeat_info->next_repeat_ns = SDL_MS_TO_NS(repeat_info->repeat_delay_ms);
     repeat_info->scancode = scancode;
     if (has_text) {
-        SDL_copyp(repeat_info->text, text);
+        SDL_memcpy(repeat_info->text, text, sizeof(repeat_info->text));
     } else {
         repeat_info->text[0] = '\0';
     }
@@ -439,7 +447,7 @@ int Wayland_WaitEventTimeout(SDL_VideoDevice *_this, Sint64 timeoutNS)
     // If key repeat is active, we'll need to cap our maximum wait time to handle repeats
     wl_list_for_each (seat, &d->seat_list, link) {
         if (keyboard_repeat_is_set(&seat->keyboard.repeat)) {
-            if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap()) {
+            if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap(true)) {
                 SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
                 SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
             }
@@ -478,7 +486,7 @@ int Wayland_WaitEventTimeout(SDL_VideoDevice *_this, Sint64 timeoutNS)
             // If key repeat is active, we might have woken up to generate a key event
             if (key_repeat_active) {
                 wl_list_for_each (seat, &d->seat_list, link) {
-                    if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap()) {
+                    if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap(true)) {
                         SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
                         SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
                     }
@@ -549,7 +557,7 @@ void Wayland_PumpEvents(SDL_VideoDevice *_this)
 
     wl_list_for_each (seat, &d->seat_list, link) {
         if (keyboard_repeat_is_set(&seat->keyboard.repeat)) {
-            if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap()) {
+            if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap(true)) {
                 SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
                 SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
             }
@@ -1821,7 +1829,7 @@ static void keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     Uint64 timestamp = SDL_GetTicksNS();
     window->last_focus_event_time_ns = timestamp;
 
-    if (SDL_GetCurrentKeymap() != seat->keyboard.sdl_keymap) {
+    if (SDL_GetCurrentKeymap(true) != seat->keyboard.sdl_keymap) {
         SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
     }
 
@@ -1971,7 +1979,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *keyboard,
 
     Wayland_UpdateImplicitGrabSerial(seat, serial);
 
-    if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap()) {
+    if (seat->keyboard.sdl_keymap != SDL_GetCurrentKeymap(true)) {
         SDL_SetKeymap(seat->keyboard.sdl_keymap, true);
         SDL_SetModState(seat->keyboard.pressed_modifiers | seat->keyboard.locked_modifiers);
     }
@@ -2132,7 +2140,7 @@ static void Wayland_SeatDestroyKeyboard(SDL_WaylandSeat *seat, bool send_event)
     SDL_RemoveKeyboard(seat->keyboard.sdl_id, send_event);
 
     if (seat->keyboard.sdl_keymap) {
-        if (seat->keyboard.sdl_keymap == SDL_GetCurrentKeymap()) {
+        if (seat->keyboard.sdl_keymap == SDL_GetCurrentKeymap(true)) {
             SDL_SetKeymap(NULL, false);
         }
         SDL_DestroyKeymap(seat->keyboard.sdl_keymap);
