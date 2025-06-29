@@ -1073,9 +1073,16 @@ void SDL_QuitAudio(void)
 
     current_audio.impl.DeinitializeStart();
 
-    // Destroy any audio streams that still exist...
-    while (current_audio.existing_streams) {
-        SDL_DestroyAudioStream(current_audio.existing_streams);
+    // Destroy any audio streams that still exist...unless app asked to keep it.
+    SDL_AudioStream *next = NULL;
+    for (SDL_AudioStream *i = current_audio.existing_streams; i; i = next) {
+        next = i->next;
+        if (i->simplified || SDL_GetBooleanProperty(i->props, SDL_PROP_AUDIOSTREAM_AUTO_CLEANUP_BOOLEAN, true)) {
+            SDL_DestroyAudioStream(i);
+        } else {
+            i->prev = NULL;
+            i->next = NULL;
+        }
     }
 
     SDL_LockRWLockForWriting(current_audio.device_hash_lock);
@@ -1599,7 +1606,9 @@ int *SDL_GetAudioDeviceChannelMap(SDL_AudioDeviceID devid, int *count)
     SDL_AudioDevice *device = ObtainPhysicalAudioDeviceDefaultAllowed(devid);
     if (device) {
         channels = device->spec.channels;
-        result = SDL_ChannelMapDup(device->chmap, channels);
+        if (channels > 0 && device->chmap) {
+            result = SDL_ChannelMapDup(device->chmap, channels);
+        }
     }
     ReleaseAudioDevice(device);
 
