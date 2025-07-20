@@ -1063,7 +1063,9 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
             }
         }
 
-        if (!rc) {
+        if (rc) {
+            SDL_LogBackend("render", renderer->name);
+        } else {
             if (driver_name) {
                 SDL_SetError("%s not available", driver_name);
             } else {
@@ -5178,7 +5180,7 @@ bool SDL_RenderGeometryRaw(SDL_Renderer *renderer,
     texture_address_mode_v = renderer->texture_address_mode_v;
     if (texture &&
         (texture_address_mode_u == SDL_TEXTURE_ADDRESS_AUTO ||
-         texture_address_mode_u == SDL_TEXTURE_ADDRESS_AUTO)) {
+         texture_address_mode_v == SDL_TEXTURE_ADDRESS_AUTO)) {
         for (i = 0; i < num_vertices; ++i) {
             const float *uv_ = (const float *)((const char *)uv + i * uv_stride);
             float u = uv_[0];
