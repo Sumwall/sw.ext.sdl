@@ -1064,7 +1064,7 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
         }
 
         if (rc) {
-            SDL_LogBackend("render", renderer->name);
+            SDL_DebugLogBackend("render", renderer->name);
         } else {
             if (driver_name) {
                 SDL_SetError("%s not available", driver_name);
@@ -4998,6 +4998,22 @@ static bool SDLCALL SDL_SW_RenderGeometryRaw(SDL_Renderer *renderer,
 #if DEBUG_SW_RENDER_GEOMETRY
                 is_uniform = 0;
 #endif
+            }
+        }
+
+        // Check if UVs within range
+        if (is_quad) {
+            const float *uv0_ = (const float *)((const char *)uv + A * color_stride);
+            const float *uv1_ = (const float *)((const char *)uv + B * color_stride);
+            const float *uv2_ = (const float *)((const char *)uv + C * color_stride);
+            const float *uv3_ = (const float *)((const char *)uv + C2 * color_stride);
+            if (uv0_[0] >= 0.0f && uv0_[0] <= 1.0f &&
+                uv1_[0] >= 0.0f && uv1_[0] <= 1.0f &&
+                uv2_[0] >= 0.0f && uv2_[0] <= 1.0f &&
+                uv3_[0] >= 0.0f && uv3_[0] <= 1.0f) {
+                // ok
+            } else {
+                is_quad = 0;
             }
         }
 
