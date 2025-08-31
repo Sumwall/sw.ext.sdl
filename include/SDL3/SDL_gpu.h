@@ -1996,6 +1996,7 @@ typedef struct SDL_GPUComputePipelineCreateInfo
  * \since This struct is available since SDL 3.2.0.
  *
  * \sa SDL_BeginGPURenderPass
+ * \sa SDL_FColor
  */
 typedef struct SDL_GPUColorTargetInfo
 {
@@ -2115,6 +2116,8 @@ typedef struct SDL_GPUBufferBinding
  *
  * \sa SDL_BindGPUVertexSamplers
  * \sa SDL_BindGPUFragmentSamplers
+ * \sa SDL_GPUTexture
+ * \sa SDL_GPUSampler
  */
 typedef struct SDL_GPUTextureSamplerBinding
 {

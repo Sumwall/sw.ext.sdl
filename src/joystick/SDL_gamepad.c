@@ -716,6 +716,13 @@ static GamepadMapping_t *SDL_CreateMappingForHIDAPIGamepad(SDL_GUID guid)
         // GameCube driver has 12 buttons and 6 axes
         SDL_strlcat(mapping_string, "a:b0,b:b2,dpdown:b6,dpleft:b4,dpright:b5,dpup:b7,lefttrigger:a4,leftx:a0,lefty:a1~,rightshoulder:b9,righttrigger:a5,rightx:a2,righty:a3~,start:b8,x:b1,y:b3,misc3:b11,misc4:b10,hint:!SDL_GAMECONTROLLER_USE_GAMECUBE_LABELS:=1,", sizeof(mapping_string));
     } else if (vendor == USB_VENDOR_NINTENDO &&
+               (product == USB_PRODUCT_NINTENDO_SWITCH2_GAMECUBE_CONTROLLER)) {
+        // Switch 2 GameCube has additional buttons for ZL and C
+        SDL_strlcat(mapping_string, "a:b1,b:b3,dpdown:b8,dpleft:b10,dpright:b9,dpup:b11,guide:b16,leftshoulder:b13,lefttrigger:a4,leftx:a0,lefty:a1~,misc1:b17,misc2:b20,misc3:b4,misc4:b12,rightshoulder:b5,righttrigger:a5,rightx:a2,righty:a3~,start:b6,x:b0,y:b2,hint:!SDL_GAMECONTROLLER_USE_GAMECUBE_LABELS:=1,", sizeof(mapping_string));
+    } else if (vendor == USB_VENDOR_NINTENDO &&
+               (product == USB_PRODUCT_NINTENDO_SWITCH2_PRO)) {
+        SDL_strlcat(mapping_string, "a:b0,b:b1,dpdown:b8,dpleft:b10,dpright:b9,dpup:b11,guide:b16,leftshoulder:b12,lefttrigger:b13,leftx:a0,lefty:a1~,misc1:b17,misc2:b20,rightshoulder:b4,righttrigger:b5,rightx:a2,righty:a3~,start:b6,back:b14,x:b2,y:b3,leftstick:b15,rightstick:b7,paddle1:b18,paddle2:b19,hint:!SDL_GAMECONTROLLER_USE_BUTTON_LABELS:=1,", sizeof(mapping_string));
+    } else if (vendor == USB_VENDOR_NINTENDO &&
                (guid.data[15] == k_eSwitchDeviceInfoControllerType_HVCLeft ||
                 guid.data[15] == k_eSwitchDeviceInfoControllerType_HVCRight ||
                 guid.data[15] == k_eSwitchDeviceInfoControllerType_NESLeft ||
@@ -2863,8 +2870,8 @@ bool SDL_ShouldIgnoreGamepad(Uint16 vendor_id, Uint16 product_id, Uint16 version
     }
 #endif
 
-    if (name && SDL_strcmp(name, "uinput-fpc") == 0) {
-        // The Google Pixel fingerprint sensor reports itself as a joystick
+    if (name && SDL_startswith(name, "uinput-")) {
+        // The Google Pixel fingerprint sensor, as well as other fingerprint sensors, reports itself as a joystick
         return true;
     }
 

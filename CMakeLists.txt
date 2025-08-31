@@ -253,6 +253,7 @@ define_sdl_subsystem(Hidapi)
 define_sdl_subsystem(Power)
 define_sdl_subsystem(Sensor)
 define_sdl_subsystem(Dialog)
+define_sdl_subsystem(Tray)
 
 cmake_dependent_option(SDL_FRAMEWORK "Build SDL libraries as Apple Framework" OFF "APPLE" OFF)
 if(SDL_FRAMEWORK)
@@ -301,6 +302,7 @@ dep_option(SDL_ARMNEON             "Use NEON assembly routines" ON "SDL_ASSEMBLY
 dep_option(SDL_LSX                 "Use LSX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_LOONGARCH64" OFF)
 dep_option(SDL_LASX                "Use LASX assembly routines" ON "SDL_ASSEMBLY;SDL_CPU_LOONGARCH64" OFF)
 
+dep_option(SDL_DLOPEN_NOTES        "Record dlopen dependencies in .note.dlopen section" TRUE UNIX_SYS OFF)
 set_option(SDL_LIBC                "Use the system C library" ${SDL_LIBC_DEFAULT})
 set_option(SDL_SYSTEM_ICONV        "Use iconv() from system-installed libraries" ${SDL_SYSTEM_ICONV_DEFAULT})
 set_option(SDL_LIBICONV            "Prefer iconv() from libiconv, if available, over libc version" OFF)
@@ -410,6 +412,7 @@ if (NGAGE)
   set(SDL_DUMMYVIDEO       OFF)
   set(SDL_OFFSCREEN        OFF)
   set(SDL_RENDER_GPU       OFF)
+  set(SDL_TRAY             OFF)
   set(SDL_VIRTUAL_JOYSTICK OFF)
 endif()
 
@@ -1082,8 +1085,10 @@ if(SDL_LIBC)
   cmake_push_check_state()
   if(MSVC)
     string(APPEND CMAKE_REQUIRED_FLAGS " -we4244 -WX")  # 'conversion' conversion from 'type1' to 'type2', possible loss of data
-  else()
+  elseif(HAVE_GCC_WFLOAT_CONVERSION)
     string(APPEND CMAKE_REQUIRED_FLAGS " -Wfloat-conversion -Werror")
+  else()
+    string(APPEND CMAKE_REQUIRED_FLAGS " -Wconversion -Werror")
   endif()
   foreach(math_fn isinf isnan)
     string(TOUPPER "${math_fn}" MATH_FN)
@@ -1121,6 +1126,7 @@ if(SDL_LIBC)
     check_symbol_exists(gethostname "unistd.h" HAVE_GETHOSTNAME)
     check_symbol_exists(getpagesize "unistd.h" HAVE_GETPAGESIZE)
     check_symbol_exists(sigaction "signal.h" HAVE_SIGACTION)
+    check_symbol_exists(sigtimedwait "signal.h" HAVE_SIGTIMEDWAIT)
     check_symbol_exists(setjmp "setjmp.h" HAVE_SETJMP)
     check_symbol_exists(nanosleep "time.h" HAVE_NANOSLEEP)
     check_symbol_exists(gmtime_r "time.h" HAVE_GMTIME_R)
@@ -1710,6 +1716,25 @@ elseif(EMSCRIPTEN)
   CheckLibUnwind()
 
 elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
+
+  if(SDL_DLOPEN_NOTES)
+    set(CHECK_ELF_DLNOTES_SRC [==[
+    #ifndef __ELF__
+      ELF DL notes is only supported on ELF platforms
+    #endif
+    __attribute__ ((used,aligned(4),section(".note.dlopen"))) static const struct {
+      struct { int a; int b; int c; } hdr; char name[4]; __attribute__((aligned(4))) char json[24];
+    } dlnote = { { 4, 0x407c0c0aU, 16 }, "FDO", "[\\"a\\":{\\"a\\":\\"1\\",\\"b\\":\\"2\\"}]" };
+    int main(int argc, char *argv[]) {
+      return argc + dlnote.hdr.a;
+    }
+    ]==])
+    check_c_source_compiles("${CHECK_ELF_DLNOTES_SRC}" COMPILER_SUPPORTS_ELFNOTES)
+    if(COMPILER_SUPPORTS_ELFNOTES)
+      set(HAVE_DLOPEN_NOTES TRUE)
+    endif()
+  endif()
+
   if(SDL_AUDIO)
     if(NETBSD)
         set(SDL_AUDIO_DRIVER_NETBSD 1)
@@ -1752,7 +1777,9 @@ elseif(UNIX AND NOT APPLE AND NOT RISCOS AND NOT HAIKU)
     CheckVivante()
     CheckVulkan()
     CheckQNXScreen()
+  endif()
 
+  if(SDL_TRAY)
     sdl_glob_sources(
       "${SDL3_SOURCE_DIR}/src/tray/unix/*.c"
       "${SDL3_SOURCE_DIR}/src/tray/unix/*.h"
@@ -2172,6 +2199,7 @@ elseif(WINDOWS)
     #include <gameinput.h>
     int main(int argc, char **argv) { return 0; }" HAVE_GAMEINPUT_H
   )
+  check_include_file(dxgi1_5.h HAVE_DXGI1_5_H)
   check_include_file(dxgi1_6.h HAVE_DXGI1_6_H)
   check_include_file(tpcshrd.h HAVE_TPCSHRD_H)
   check_include_file(roapi.h HAVE_ROAPI_H)
@@ -2329,7 +2357,9 @@ elseif(WINDOWS)
         set(HAVE_RENDER_VULKAN TRUE)
       endif()
     endif()
+  endif()
 
+  if(SDL_TRAY)
     sdl_glob_sources("${SDL3_SOURCE_DIR}/src/tray/windows/*.c")
     set(HAVE_SDL_TRAY TRUE)
   endif()
@@ -2645,11 +2675,11 @@ elseif(APPLE)
         endif()
       endif()
     endif()
+  endif()
 
-    if(MACOS)
-      sdl_glob_sources("${SDL3_SOURCE_DIR}/src/tray/cocoa/*.m")
-      set(HAVE_SDL_TRAY TRUE)
-    endif()
+  if(SDL_TRAY AND MACOS)
+    sdl_glob_sources("${SDL3_SOURCE_DIR}/src/tray/cocoa/*.m")
+    set(HAVE_SDL_TRAY TRUE)
   endif()
 
   # Minimum version for $<LINK_LIBRARY:feature,library-list>
@@ -3368,7 +3398,7 @@ if(WINDOWS)
   )
   set(SDL_PROCESS_WINDOWS 1)
   set(HAVE_SDL_PROCESS TRUE)
-else()
+elseif(NOT ANDROID)
   check_c_source_compiles("
 #include <spawn.h>
 #include <unistd.h>
