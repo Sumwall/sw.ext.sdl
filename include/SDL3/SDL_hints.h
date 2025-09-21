@@ -686,6 +686,22 @@ extern "C" {
 #define SDL_HINT_DISPLAY_USABLE_BOUNDS "SDL_DISPLAY_USABLE_BOUNDS"
 
 /**
+ * Set the level of checking for invalid parameters passed to SDL functions.
+ *
+ * The variable can be set to the following values:
+ *
+ * - "1": Enable fast parameter error checking, e.g. quick NULL checks, etc.
+ *   (default)
+ * - "2": Enable full parameter error checking, e.g. validating objects are
+ *   the correct type, etc.
+ *
+ * This hint can be set anytime.
+ *
+ * \since This hint is available since SDL 3.4.0.
+ */
+#define SDL_HINT_INVALID_PARAM_CHECKS "SDL_INVALID_PARAM_CHECKS"
+
+/**
  * Disable giving back control to the browser automatically when running with
  * asyncify.
  *
@@ -2227,8 +2243,8 @@ extern "C" {
  *
  * The variable can be set to the following values:
  *
- * - "0": WGI is not used.
- * - "1": WGI is used. (default)
+ * - "0": WGI is not used. (default)
+ * - "1": WGI is used.
  *
  * This hint should be set before SDL is initialized.
  *
@@ -4558,12 +4574,7 @@ extern SDL_DECLSPEC void SDLCALL SDL_ResetHints(void);
  * \param name the hint to query.
  * \returns the string value of a hint or NULL if the hint isn't set.
  *
- * \threadsafety It is safe to call this function from any thread, however the
- *               return value only remains valid until the hint is changed; if
- *               another thread might do so, the app should supply locks
- *               and/or make a copy of the string. Note that using a hint
- *               callback instead is always thread-safe, as SDL holds a lock
- *               on the thread subsystem during the callback.
+ * \threadsafety It is safe to call this function from any thread.
  *
  * \since This function is available since SDL 3.2.0.
  *

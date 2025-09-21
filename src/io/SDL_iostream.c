@@ -219,7 +219,6 @@ static size_t SDLCALL windows_file_read(void *userdata, void *ptr, size_t size, 
             DWORD error = GetLastError();
             switch (error) {
             case ERROR_BROKEN_PIPE:
-            case ERROR_HANDLE_EOF:
                 *status = SDL_IO_STATUS_EOF;
                 break;
             case ERROR_NO_DATA:
@@ -231,6 +230,8 @@ static size_t SDLCALL windows_file_read(void *userdata, void *ptr, size_t size, 
                 break;
             }
             return 0;  // !!! FIXME: this should return the bytes read from any readahead we finished out before this (the `iodata->left > 0` code above). In that case, fail on the next read.
+        } else if (bytes == 0) {
+            *status = SDL_IO_STATUS_EOF;
         }
         read_ahead = SDL_min(total_need, bytes);
         SDL_memcpy(ptr, iodata->data, read_ahead);
@@ -242,7 +243,6 @@ static size_t SDLCALL windows_file_read(void *userdata, void *ptr, size_t size, 
             DWORD error = GetLastError();
             switch (error) {
             case ERROR_BROKEN_PIPE:
-            case ERROR_HANDLE_EOF:
                 *status = SDL_IO_STATUS_EOF;
                 break;
             case ERROR_NO_DATA:
@@ -254,6 +254,8 @@ static size_t SDLCALL windows_file_read(void *userdata, void *ptr, size_t size, 
                 break;
             }
             return 0;  // !!! FIXME: this should return the bytes read from any readahead we finished out before this (the `iodata->left > 0` code above). In that case, fail on the next read.
+        } else if (bytes == 0) {
+            *status = SDL_IO_STATUS_EOF;
         }
         total_read += bytes;
     }
@@ -502,7 +504,8 @@ static bool SDLCALL fd_flush(void *userdata, SDL_IOStatus *status)
         result = SDL_fdatasync(iodata->fd);
     } while (result < 0 && errno == EINTR);
 
-    if (result < 0) {
+    // We get EINVAL when flushing a pipe, just make that a no-op
+    if (result < 0 && errno != EINVAL) {
         return SDL_SetError("Error flushing datastream: %s", strerror(errno));
     }
     return true;
@@ -872,11 +875,11 @@ SDL_IOStream *SDL_IOFromFile(const char *file, const char *mode)
 {
     SDL_IOStream *iostr = NULL;
 
-    if (!file || !*file) {
+    CHECK_PARAM(!file || !*file) {
         SDL_InvalidParamError("file");
         return NULL;
     }
-    if (!mode || !*mode) {
+    CHECK_PARAM(!mode || !*mode) {
         SDL_InvalidParamError("mode");
         return NULL;
     }
@@ -988,10 +991,11 @@ SDL_IOStream *SDL_IOFromFile(const char *file, const char *mode)
 
 SDL_IOStream *SDL_IOFromMem(void *mem, size_t size)
 {
-    if (!mem) {
+    CHECK_PARAM(!mem) {
         SDL_InvalidParamError("mem");
         return NULL;
-    } else if (!size) {
+    }
+    CHECK_PARAM(!size) {
         SDL_InvalidParamError("size");
         return NULL;
     }
@@ -1029,10 +1033,11 @@ SDL_IOStream *SDL_IOFromMem(void *mem, size_t size)
 
 SDL_IOStream *SDL_IOFromConstMem(const void *mem, size_t size)
 {
-    if (!mem) {
+    CHECK_PARAM(!mem) {
         SDL_InvalidParamError("mem");
         return NULL;
-    } else if (!size) {
+    }
+    CHECK_PARAM(!size) {
         SDL_InvalidParamError("size");
         return NULL;
     }
@@ -1175,7 +1180,7 @@ SDL_IOStream *SDL_IOFromDynamicMem(void)
 
 SDL_IOStatus SDL_GetIOStatus(SDL_IOStream *context)
 {
-    if (!context) {
+    CHECK_PARAM(!context) {
         SDL_InvalidParamError("context");
         return SDL_IO_STATUS_ERROR;
     }
@@ -1184,11 +1189,11 @@ SDL_IOStatus SDL_GetIOStatus(SDL_IOStream *context)
 
 SDL_IOStream *SDL_OpenIO(const SDL_IOStreamInterface *iface, void *userdata)
 {
-    if (!iface) {
+    CHECK_PARAM(!iface) {
         SDL_InvalidParamError("iface");
         return NULL;
     }
-    if (iface->version < sizeof(*iface)) {
+    CHECK_PARAM(iface->version < sizeof(*iface)) {
         // Update this to handle older versions of this interface
         SDL_SetError("Invalid interface, should be initialized with SDL_INIT_INTERFACE()");
         return NULL;
@@ -1224,7 +1229,7 @@ void *SDL_LoadFile_IO(SDL_IOStream *src, size_t *datasize, bool closeio)
     char *data = NULL, *newdata;
     bool loading_chunks = false;
 
-    if (!src) {
+    CHECK_PARAM(!src) {
         SDL_InvalidParamError("src");
         goto done;
     }
@@ -1305,12 +1310,12 @@ bool SDL_SaveFile_IO(SDL_IOStream *src, const void *data, size_t datasize, bool 
     size_t size_total = 0;
     bool success = true;
 
-    if (!src) {
+    CHECK_PARAM(!src) {
         SDL_InvalidParamError("src");
         goto done;
     }
 
-    if (!data && datasize > 0) {
+    CHECK_PARAM(!data && datasize > 0) {
         SDL_InvalidParamError("data");
         goto done;
     }
@@ -1353,7 +1358,7 @@ bool SDL_SaveFile(const char *file, const void *data, size_t datasize)
 
 SDL_PropertiesID SDL_GetIOProperties(SDL_IOStream *context)
 {
-    if (!context) {
+    CHECK_PARAM(!context) {
         SDL_InvalidParamError("context");
         return 0;
     }
@@ -1366,9 +1371,10 @@ SDL_PropertiesID SDL_GetIOProperties(SDL_IOStream *context)
 
 Sint64 SDL_GetIOSize(SDL_IOStream *context)
 {
-    if (!context) {
+    CHECK_PARAM(!context) {
         return SDL_InvalidParamError("context");
     }
+
     if (!context->iface.size) {
         Sint64 pos, size;
 
@@ -1386,10 +1392,12 @@ Sint64 SDL_GetIOSize(SDL_IOStream *context)
 
 Sint64 SDL_SeekIO(SDL_IOStream *context, Sint64 offset, SDL_IOWhence whence)
 {
-    if (!context) {
+    CHECK_PARAM(!context) {
         SDL_InvalidParamError("context");
         return -1;
-    } else if (!context->iface.seek) {
+    }
+
+    if (!context->iface.seek) {
         SDL_Unsupported();
         return -1;
     }
@@ -1403,14 +1411,18 @@ Sint64 SDL_TellIO(SDL_IOStream *context)
 
 size_t SDL_ReadIO(SDL_IOStream *context, void *ptr, size_t size)
 {
-    if (!context) {
+    CHECK_PARAM(!context) {
         SDL_InvalidParamError("context");
         return 0;
-    } else if (!context->iface.read) {
+    }
+
+    if (!context->iface.read) {
         context->status = SDL_IO_STATUS_WRITEONLY;
         SDL_Unsupported();
         return 0;
-    } else if (size == 0) {
+    }
+
+    if (size == 0) {
         return 0;  // context->status doesn't change for this.
     }
 
@@ -1422,14 +1434,18 @@ size_t SDL_ReadIO(SDL_IOStream *context, void *ptr, size_t size)
 
 size_t SDL_WriteIO(SDL_IOStream *context, const void *ptr, size_t size)
 {
-    if (!context) {
+    CHECK_PARAM(!context) {
         SDL_InvalidParamError("context");
         return 0;
-    } else if (!context->iface.write) {
+    }
+
+    if (!context->iface.write) {
         context->status = SDL_IO_STATUS_READONLY;
         SDL_Unsupported();
         return 0;
-    } else if (size == 0) {
+    }
+
+    if (size == 0) {
         return 0;  // context->status doesn't change for this.
     }
 
@@ -1478,7 +1494,7 @@ bool SDL_FlushIO(SDL_IOStream *context)
 {
     bool result = true;
 
-    if (!context) {
+    CHECK_PARAM(!context) {
         return SDL_InvalidParamError("context");
     }
 
