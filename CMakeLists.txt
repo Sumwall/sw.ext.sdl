@@ -640,6 +640,10 @@ if(USE_GCC OR USE_CLANG OR USE_INTELCC OR USE_QCC)
     if(COMPILER_SUPPORTS_WNO_ERROR_DEPRECATED_DECLARATIONS)
       sdl_compile_options(PRIVATE "-Wno-error=deprecated-declarations")
     endif()
+    check_c_compiler_flag(-Wno-deprecated-declarations COMPILER_SUPPORTS_WNO_DEPRECATED_DECLARATIONS)
+    if(COMPILER_SUPPORTS_WNO_DEPRECATED_DECLARATIONS)
+      sdl_compile_options(PRIVATE "-Wno-deprecated-declarations")
+    endif()
   endif()
 
   if(APPLE)
@@ -2601,6 +2605,7 @@ elseif(APPLE)
       set(SDL_FRAMEWORK_UIKIT 1)
       set(SDL_IPHONE_KEYBOARD 1)
       set(SDL_IPHONE_LAUNCHSCREEN 1)
+      set(SDL_FRAMEWORK_GAMECONTROLLER 1)
       sdl_glob_sources(
         "${SDL3_SOURCE_DIR}/src/video/uikit/*.m"
         "${SDL3_SOURCE_DIR}/src/video/uikit/*.h"
