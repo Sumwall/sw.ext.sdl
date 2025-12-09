@@ -30,7 +30,8 @@ class JobOs(Enum):
     Ubuntu22_04 = "ubuntu-22.04"
     Ubuntu24_04 = "ubuntu-24.04"
     Ubuntu24_04_arm = "ubuntu-24.04-arm"
-    Macos13 = "macos-13"  # macOS Ventura (2022)
+    Macos14 = "macos-14"  # macOS Sonoma (2023)
+    Macos15 = "macos-15"  # macOS Sequoia (2024)
     Macos26 = "macos-26"  # macOS Tahoe (2025)
 
 
@@ -55,7 +56,6 @@ class SdlPlatform(Enum):
     FreeBSD = "freebsd"
     NetBSD = "netbsd"
     OpenBSD = "openbsd"
-    NGage = "ngage"
 
 
 class Msys2Platform(Enum):
@@ -114,13 +114,11 @@ JOB_SPECS = {
     "msvc-gdk-x64": JobSpec(name="GDK (MSVC, x64)",                         os=JobOs.WindowsLatest,     platform=SdlPlatform.Msvc,        artifact="SDL-VC-GDK",             msvc_arch=MsvcArch.X64,   msvc_project="VisualC-GDK/SDL.sln", gdk=True, no_cmake=True, ),
     "ubuntu-22.04": JobSpec(name="Ubuntu 22.04",                            os=JobOs.Ubuntu22_04,       platform=SdlPlatform.Linux,       artifact="SDL-ubuntu22.04", ),
     "ubuntu-24.04-arm64": JobSpec(name="Ubuntu 24.04 (ARM64)",              os=JobOs.Ubuntu24_04_arm,   platform=SdlPlatform.Linux,       artifact="SDL-ubuntu24.04-arm64", ),
-    "steamrt3": JobSpec(name="Steam Linux Runtime 3.0 (x86_64)",            os=JobOs.UbuntuLatest,      platform=SdlPlatform.Linux,       artifact="SDL-steamrt3",           container="registry.gitlab.steamos.cloud/steamrt/sniper/sdk:latest", ),
-    "steamrt3-arm64": JobSpec(name="Steam Linux Runtime 3.0 (arm64)",       os=JobOs.Ubuntu24_04_arm,   platform=SdlPlatform.Linux,       artifact="SDL-steamrt3-arm64",     container="registry.gitlab.steamos.cloud/steamrt/sniper/sdk/arm64:latest", ),
+    "steamrt-sniper": JobSpec(name="Steam Linux Runtime (Sniper)",          os=JobOs.UbuntuLatest,      platform=SdlPlatform.Linux,       artifact="SDL-slrsniper",          container="registry.gitlab.steamos.cloud/steamrt/sniper/sdk:beta", ),
     "ubuntu-intel-icx": JobSpec(name="Ubuntu 22.04 (Intel oneAPI)",         os=JobOs.Ubuntu22_04,       platform=SdlPlatform.Linux,       artifact="SDL-ubuntu22.04-oneapi", intel=IntelCompiler.Icx, ),
     "ubuntu-intel-icc": JobSpec(name="Ubuntu 22.04 (Intel Compiler)",       os=JobOs.Ubuntu22_04,       platform=SdlPlatform.Linux,       artifact="SDL-ubuntu22.04-icc",    intel=IntelCompiler.Icc, ),
-    "macos-framework-x64":  JobSpec(name="MacOS (Framework) (x64)",         os=JobOs.Macos13,           platform=SdlPlatform.MacOS,       artifact="SDL-macos-framework",    apple_framework=True,  apple_archs={AppleArch.Aarch64, AppleArch.X86_64, }, xcode=True, ),
+    "macos-framework-x64":  JobSpec(name="MacOS (Framework) (x64)",         os=JobOs.Macos14,           platform=SdlPlatform.MacOS,       artifact="SDL-macos-framework",    apple_framework=True,  apple_archs={AppleArch.Aarch64, AppleArch.X86_64, }, xcode=True, ),
     "macos-framework-arm64": JobSpec(name="MacOS (Framework) (arm64)",      os=JobOs.MacosLatest,       platform=SdlPlatform.MacOS,       artifact=None,                     apple_framework=True,  apple_archs={AppleArch.Aarch64, AppleArch.X86_64, }, ),
-    "macos-26-framework-arm64": JobSpec(name="MacOS 26 (Framework) (arm64)",os=JobOs.Macos26,           platform=SdlPlatform.MacOS,       artifact=None,                     apple_framework=True,  apple_archs={AppleArch.Aarch64, AppleArch.X86_64, }, ),
     "macos-gnu-arm64": JobSpec(name="MacOS (GNU prefix)",                   os=JobOs.MacosLatest,       platform=SdlPlatform.MacOS,       artifact="SDL-macos-arm64-gnu",    apple_framework=False, apple_archs={AppleArch.Aarch64, },  ),
     "ios": JobSpec(name="iOS (CMake & xcode)",                              os=JobOs.MacosLatest,       platform=SdlPlatform.Ios,         artifact="SDL-ios-arm64",          xcode=True, ),
     "tvos": JobSpec(name="tvOS (CMake & xcode)",                            os=JobOs.MacosLatest,       platform=SdlPlatform.Tvos,        artifact="SDL-tvos-arm64",         xcode=True, ),
@@ -142,12 +140,11 @@ JOB_SPECS = {
     "netbsd": JobSpec(name="NetBSD",                                        os=JobOs.UbuntuLatest,      platform=SdlPlatform.NetBSD,      artifact="SDL-netbsd-x64", ),
     "openbsd": JobSpec(name="OpenBSD",                                      os=JobOs.UbuntuLatest,      platform=SdlPlatform.OpenBSD,     artifact="SDL-openbsd-x64", ),
     "freebsd": JobSpec(name="FreeBSD",                                      os=JobOs.UbuntuLatest,      platform=SdlPlatform.FreeBSD,     artifact="SDL-freebsd-x64", ),
-    "ngage": JobSpec(name="N-Gage",                                         os=JobOs.WindowsLatest,     platform=SdlPlatform.NGage,       artifact="SDL-ngage", ),
 }
 
 
 class StaticLibType(Enum):
-    STATIC_LIB = "SDL3-static.lib"
+    MSVC = "SDL3-static.lib"
     A = "libSDL3.a"
 
 
@@ -228,7 +225,6 @@ class JobDetails:
     check_sources: bool = False
     setup_python: bool = False
     pypi_packages: list[str] = dataclasses.field(default_factory=list)
-    setup_gage_sdk_path: str = ""
     binutils_strings: str = "strings"
 
     def to_workflow(self, enable_artifacts: bool) -> dict[str, str|bool]:
@@ -298,7 +294,6 @@ class JobDetails:
             "check-sources": self.check_sources,
             "setup-python": self.setup_python,
             "pypi-packages": my_shlex_join(self.pypi_packages),
-            "setup-ngage-sdk-path": self.setup_gage_sdk_path,
             "binutils-strings": self.binutils_strings,
         }
         return {k: v for k, v in data.items() if v != ""}
@@ -375,7 +370,7 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool) -> JobDeta
             job.msvc_project_flags.append("-p:TreatWarningsAsError=true")
             job.test_pkg_config = False
             job.shared_lib = SharedLibType.WIN32
-            job.static_lib = StaticLibType.STATIC_LIB
+            job.static_lib = StaticLibType.MSVC
             job.cmake_arguments.extend((
                 "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=ProgramDatabase",
                 "-DCMAKE_EXE_LINKER_FLAGS=-DEBUG",
@@ -392,11 +387,9 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool) -> JobDeta
                 match spec.msvc_arch:
                     case MsvcArch.X86:
                         job.cflags.append("/clang:-m32")
-                        job.cxxflags.append("/clang:-m32")
                         job.ldflags.append("/MACHINE:X86")
                     case MsvcArch.X64:
                         job.cflags.append("/clang:-m64")
-                        job.cxxflags.append("/clang:-m64")
                         job.ldflags.append("/MACHINE:X64")
                     case _:
                         raise ValueError(f"Unsupported clang-cl architecture (arch={spec.msvc_arch})")
@@ -521,8 +514,6 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool) -> JobDeta
                 job.shared_lib = SharedLibType.DYLIB
                 job.static_lib = StaticLibType.A
             job.ccache = True
-            if spec.os == JobOs.Macos13:
-                job.ccache = False
             job.apt_packages = []
             job.brew_packages.extend((
                 "ninja",
@@ -658,7 +649,7 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool) -> JobDeta
             job.cmake_arguments.extend((
                 f"-DCMAKE_C_COMPILER={job.cc}",
                 f"-DCMAKE_CXX_COMPILER={job.cxx}",
-                "-DCMAKE_SYSTEM_NAME=Haiku",
+                "-DSDL_UNIX_CONSOLE_BUILD=ON",
             ))
             job.shared_lib = SharedLibType.SO_0
             job.static_lib = StaticLibType.A
@@ -742,7 +733,7 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool) -> JobDeta
             match spec.platform:
                 case SdlPlatform.FreeBSD:
                     job.cpactions_os = "freebsd"
-                    job.cpactions_version = "14.2"
+                    job.cpactions_version = "14.3"
                     job.cpactions_arch = "x86-64"
                     job.cpactions_setup_cmd = "sudo pkg update"
                     job.cpactions_install_cmd = "sudo pkg install -y cmake ninja pkgconf libXcursor libXext libXinerama libXi libXfixes libXrandr libXScrnSaver libXxf86vm wayland wayland-protocols libxkbcommon mesa-libs libglvnd evdev-proto libinotify alsa-lib jackit pipewire pulseaudio sndio dbus zh-fcitx ibus libudev-devd"
@@ -758,23 +749,10 @@ def spec_to_job(spec: JobSpec, key: str, trackmem_symbol_names: bool) -> JobDeta
                     job.cpactions_install_cmd = "sudo -E pkgin -y install cmake dbus pkgconf ninja-build pulseaudio libxkbcommon wayland wayland-protocols libinotify libusb1"
                 case SdlPlatform.OpenBSD:
                     job.cpactions_os = "openbsd"
-                    job.cpactions_version = "7.4"
+                    job.cpactions_version = "7.7"
                     job.cpactions_arch = "x86-64"
                     job.cpactions_setup_cmd = "sudo pkg_add -u"
-                    job.cpactions_install_cmd = "sudo pkg_add cmake ninja pkgconf wayland wayland-protocols xwayland libxkbcommon libinotify pulseaudio dbus ibus"
-        case SdlPlatform.NGage:
-            build_parallel = False
-            job.cmake_build_type = "Release"
-            job.setup_ninja = True
-            job.static_lib = StaticLibType.STATIC_LIB
-            job.shared_lib = None
-            job.clang_tidy = False
-            job.werror = False  # FIXME: enable SDL_WERROR
-            job.shared = False
-            job.run_tests = False
-            job.setup_gage_sdk_path = "C:/ngagesdk"
-            job.cmake_toolchain_file = "C:/ngagesdk/cmake/ngage-toolchain.cmake"
-            job.test_pkg_config = False
+                    job.cpactions_install_cmd = "sudo pkg_add cmake ninja pkgconf wayland wayland-protocols libxkbcommon libinotify pulseaudio dbus ibus"
         case _:
             raise ValueError(f"Unsupported platform={spec.platform}")
 

@@ -29,13 +29,6 @@
 
 #ifdef SDL_VIDEO_DRIVER_KMSDRM_DYNAMIC
 
-SDL_ELF_NOTE_DLOPEN(
-    "video-kmsdrm",
-    "Support for KMSDRM",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_SUGGESTED,
-    SDL_VIDEO_DRIVER_KMSDRM_DYNAMIC
-);
-
 typedef struct
 {
     void *lib;

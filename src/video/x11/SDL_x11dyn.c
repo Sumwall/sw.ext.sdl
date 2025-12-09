@@ -38,88 +38,23 @@ typedef struct
     const char *libname;
 } x11dynlib;
 
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC
-);
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XEXT
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XEXT
-);
-#else
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XEXT
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XEXT NULL
 #endif
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XCURSOR
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XCURSOR
-);
-#else
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XCURSOR
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XCURSOR NULL
 #endif
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2
-);
-#else
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2 NULL
 #endif
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES
-);
-#else
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES NULL
 #endif
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR
-);
-#else
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR NULL
 #endif
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS
-);
-#else
+#ifndef SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS
 #define SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS NULL
-#endif
-
-#ifdef SDL_VIDEO_DRIVER_X11_DYNAMIC_XTEST
-SDL_ELF_NOTE_DLOPEN(
-    "x11",
-    "Support for video through X11 backend",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_VIDEO_DRIVER_X11_DYNAMIC_XTEST
-);
-#else
-#define SDL_VIDEO_DRIVER_X11_DYNAMIC_XTEST NULL
 #endif
 
 static x11dynlib x11libs[] = {
@@ -129,8 +64,7 @@ static x11dynlib x11libs[] = {
     { NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XINPUT2 },
     { NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XFIXES },
     { NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XRANDR },
-    { NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS },
-    { NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XTEST }
+    { NULL, SDL_VIDEO_DRIVER_X11_DYNAMIC_XSS }
 };
 
 static void *X11_GetSym(const char *fnname, int *pHasModule)
@@ -163,8 +97,16 @@ static void *X11_GetSym(const char *fnname, int *pHasModule)
 #endif // SDL_VIDEO_DRIVER_X11_DYNAMIC
 
 // Define all the function pointers and wrappers...
-#define SDL_X11_SYM(rc, fn, params) SDL_DYNX11FN_##fn X11_##fn = NULL;
+#define SDL_X11_SYM(rc, fn, params, args, ret) SDL_DYNX11FN_##fn X11_##fn = NULL;
 #include "SDL_x11sym.h"
+
+// Annoying varargs entry point...
+#ifdef X_HAVE_UTF8_STRING
+SDL_DYNX11FN_XCreateIC X11_XCreateIC = NULL;
+SDL_DYNX11FN_XGetICValues X11_XGetICValues = NULL;
+SDL_DYNX11FN_XSetICValues X11_XSetICValues = NULL;
+SDL_DYNX11FN_XVaCreateNestedList X11_XVaCreateNestedList = NULL;
+#endif
 
 /* These SDL_X11_HAVE_* flags are here whether you have dynamic X11 or not. */
 #define SDL_X11_MODULE(modname) int SDL_X11_HAVE_##modname = 0;
@@ -183,7 +125,7 @@ void SDL_X11_UnloadSymbols(void)
 
             // set all the function pointers to NULL.
 #define SDL_X11_MODULE(modname)                SDL_X11_HAVE_##modname = 0;
-#define SDL_X11_SYM(rc, fn, params) X11_##fn = NULL;
+#define SDL_X11_SYM(rc, fn, params, args, ret) X11_##fn = NULL;
 #include "SDL_x11sym.h"
 
 #ifdef X_HAVE_UTF8_STRING
@@ -225,7 +167,7 @@ bool SDL_X11_LoadSymbols(void)
 #include "SDL_x11sym.h"
 
 #define SDL_X11_MODULE(modname)     thismod = &SDL_X11_HAVE_##modname;
-#define SDL_X11_SYM(rc, fn, params) X11_##fn = (SDL_DYNX11FN_##fn)X11_GetSym(#fn, thismod);
+#define SDL_X11_SYM(a, fn, x, y, z) X11_##fn = (SDL_DYNX11FN_##fn)X11_GetSym(#fn, thismod);
 #include "SDL_x11sym.h"
 
 #ifdef X_HAVE_UTF8_STRING
@@ -251,7 +193,7 @@ bool SDL_X11_LoadSymbols(void)
 #else // no dynamic X11
 
 #define SDL_X11_MODULE(modname)     SDL_X11_HAVE_##modname = 1; // default yes
-#define SDL_X11_SYM(rc, fn, params) X11_##fn = (SDL_DYNX11FN_##fn)fn;
+#define SDL_X11_SYM(a, fn, x, y, z) X11_##fn = (SDL_DYNX11FN_##fn)fn;
 #include "SDL_x11sym.h"
 
 #ifdef X_HAVE_UTF8_STRING

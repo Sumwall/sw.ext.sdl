@@ -92,13 +92,13 @@ static bool readRlePixels(SDL_Surface *surface, SDL_IOStream *src, int isRle8)
         | with two colour indexes to alternate between for the run
         */
         if (ch) {
-            Uint8 pixelvalue;
-            if (!SDL_ReadU8(src, &pixelvalue)) {
+            Uint8 pixel;
+            if (!SDL_ReadU8(src, &pixel)) {
                 return false;
             }
             ch /= pixels_per_byte;
             do {
-                COPY_PIXEL(pixelvalue);
+                COPY_PIXEL(pixel);
             } while (--ch);
         } else {
             /*
@@ -131,11 +131,11 @@ static bool readRlePixels(SDL_Surface *surface, SDL_IOStream *src, int isRle8)
                 ch /= pixels_per_byte;
                 needsPad = (ch & 1);
                 do {
-                    Uint8 pixelvalue;
-                    if (!SDL_ReadU8(src, &pixelvalue)) {
+                    Uint8 pixel;
+                    if (!SDL_ReadU8(src, &pixel)) {
                         return false;
                     }
-                    COPY_PIXEL(pixelvalue);
+                    COPY_PIXEL(pixel);
                 } while (--ch);
 
                 // pad at even boundary
@@ -216,7 +216,7 @@ SDL_Surface *SDL_LoadBMP_IO(SDL_IOStream *src, bool closeio)
 
     // Make sure we are passed a valid data source
     surface = NULL;
-    CHECK_PARAM(!src) {
+    if (!src) {
         SDL_InvalidParamError("src");
         goto done;
     }
@@ -630,11 +630,11 @@ bool SDL_SaveBMP_IO(SDL_Surface *surface, SDL_IOStream *dst, bool closeio)
     Uint32 bV5Reserved = 0;
 
     // Make sure we have somewhere to save
-    CHECK_PARAM(!SDL_SurfaceValid(surface)) {
+    if (!SDL_SurfaceValid(surface)) {
         SDL_InvalidParamError("surface");
         goto done;
     }
-    CHECK_PARAM(!dst) {
+    if (!dst) {
         SDL_InvalidParamError("dst");
         goto done;
     }

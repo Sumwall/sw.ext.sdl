@@ -101,7 +101,7 @@ found_date:
 
 bool SDL_GetCurrentTime(SDL_Time *ticks)
 {
-    CHECK_PARAM(!ticks) {
+    if (!ticks) {
         return SDL_InvalidParamError("ticks");
     }
 #ifdef HAVE_CLOCK_GETTIME
@@ -158,7 +158,7 @@ bool SDL_TimeToDateTime(SDL_Time ticks, SDL_DateTime *dt, bool localTime)
 #endif
     struct tm *tm = NULL;
 
-    CHECK_PARAM(!dt) {
+    if (!dt) {
         return SDL_InvalidParamError("dt");
     }
 

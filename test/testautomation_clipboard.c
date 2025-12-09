@@ -412,6 +412,7 @@ static int SDLCALL clipboard_testClipboardTextFunctions(void *arg)
     char *textRef = SDLTest_RandomAsciiString();
     char *text = SDL_strdup(textRef);
     bool boolResult;
+    int intResult;
     char *charResult;
     int last_clipboard_update_count;
 
@@ -419,11 +420,11 @@ static int SDLCALL clipboard_testClipboardTextFunctions(void *arg)
 
     /* Empty clipboard text */
     last_clipboard_update_count = clipboard_update_count;
-    boolResult = SDL_SetClipboardText(NULL);
+    intResult = SDL_SetClipboardText(NULL);
     SDLTest_AssertCheck(
-        boolResult == true,
-        "Verify result from SDL_SetClipboardText(NULL), expected true, got %s",
-        boolResult ? "true" : "false");
+        intResult == true,
+        "Verify result from SDL_SetClipboardText(NULL), expected true, got %i",
+        intResult);
     charResult = SDL_GetClipboardText();
     SDLTest_AssertCheck(
         charResult && SDL_strcmp(charResult, "") == 0,
@@ -434,7 +435,7 @@ static int SDLCALL clipboard_testClipboardTextFunctions(void *arg)
     SDLTest_AssertCheck(
         boolResult == false,
         "Verify SDL_HasClipboardText returned false, got %s",
-        boolResult ? "true" : "false");
+        (boolResult) ? "true" : "false");
     SDLTest_AssertCheck(
         clipboard_update_count == last_clipboard_update_count + 1,
         "Verify clipboard update count incremented by 1, got %d",
@@ -443,11 +444,11 @@ static int SDLCALL clipboard_testClipboardTextFunctions(void *arg)
 
     /* Set clipboard text  */
     last_clipboard_update_count = clipboard_update_count;
-    boolResult = SDL_SetClipboardText(text);
+    intResult = SDL_SetClipboardText(text);
     SDLTest_AssertCheck(
-        boolResult == true,
-        "Verify result from SDL_SetClipboardText(%s), expected true, got %s", text,
-        boolResult ? "true" : "false");
+        intResult == true,
+        "Verify result from SDL_SetClipboardText(%s), expected true, got %i", text,
+        intResult);
     SDLTest_AssertCheck(
         SDL_strcmp(textRef, text) == 0,
         "Verify SDL_SetClipboardText did not modify input string, expected '%s', got '%s'",
@@ -456,7 +457,7 @@ static int SDLCALL clipboard_testClipboardTextFunctions(void *arg)
     SDLTest_AssertCheck(
         boolResult == true,
         "Verify SDL_HasClipboardText returned true, got %s",
-        boolResult ? "true" : "false");
+        (boolResult) ? "true" : "false");
     charResult = SDL_GetClipboardText();
     SDLTest_AssertCheck(
         charResult && SDL_strcmp(textRef, charResult) == 0,
@@ -469,11 +470,11 @@ static int SDLCALL clipboard_testClipboardTextFunctions(void *arg)
         clipboard_update_count - last_clipboard_update_count);
 
     /* Reset clipboard text */
-    boolResult = SDL_SetClipboardText(NULL);
+    intResult = SDL_SetClipboardText(NULL);
     SDLTest_AssertCheck(
-        boolResult == true,
-        "Verify result from SDL_SetClipboardText(NULL), expected true, got %s",
-        boolResult ? "true" : "false");
+        intResult == true,
+        "Verify result from SDL_SetClipboardText(NULL), expected true, got %i",
+        intResult);
 
     /* Cleanup */
     SDL_free(textRef);
@@ -495,6 +496,7 @@ static int SDLCALL clipboard_testPrimarySelectionTextFunctions(void *arg)
     char *textRef = SDLTest_RandomAsciiString();
     char *text = SDL_strdup(textRef);
     bool boolResult;
+    int intResult;
     char *charResult;
     int last_clipboard_update_count;
 
@@ -502,11 +504,11 @@ static int SDLCALL clipboard_testPrimarySelectionTextFunctions(void *arg)
 
     /* Empty primary selection */
     last_clipboard_update_count = clipboard_update_count;
-    boolResult = SDL_SetPrimarySelectionText(NULL);
+    intResult = SDL_SetPrimarySelectionText(NULL);
     SDLTest_AssertCheck(
-        boolResult == true,
-        "Verify result from SDL_SetPrimarySelectionText(NULL), expected true, got %s",
-        boolResult ? "true" : "false");
+        intResult == true,
+        "Verify result from SDL_SetPrimarySelectionText(NULL), expected true, got %i",
+        intResult);
     charResult = SDL_GetPrimarySelectionText();
     SDLTest_AssertCheck(
         charResult && SDL_strcmp(charResult, "") == 0,
@@ -517,7 +519,7 @@ static int SDLCALL clipboard_testPrimarySelectionTextFunctions(void *arg)
     SDLTest_AssertCheck(
         boolResult == false,
         "Verify SDL_HasPrimarySelectionText returned false, got %s",
-        boolResult ? "true" : "false");
+        (boolResult) ? "true" : "false");
     SDLTest_AssertCheck(
         clipboard_update_count == last_clipboard_update_count + 1,
         "Verify clipboard update count incremented by 1, got %d",
@@ -525,11 +527,11 @@ static int SDLCALL clipboard_testPrimarySelectionTextFunctions(void *arg)
 
     /* Set primary selection  */
     last_clipboard_update_count = clipboard_update_count;
-    boolResult = SDL_SetPrimarySelectionText(text);
+    intResult = SDL_SetPrimarySelectionText(text);
     SDLTest_AssertCheck(
-        boolResult == true,
-        "Verify result from SDL_SetPrimarySelectionText(%s), expected true, got %s", text,
-        boolResult ? "true" : "false");
+        intResult == true,
+        "Verify result from SDL_SetPrimarySelectionText(%s), expected true, got %i", text,
+        intResult);
     SDLTest_AssertCheck(
         SDL_strcmp(textRef, text) == 0,
         "Verify SDL_SetPrimarySelectionText did not modify input string, expected '%s', got '%s'",
@@ -538,7 +540,7 @@ static int SDLCALL clipboard_testPrimarySelectionTextFunctions(void *arg)
     SDLTest_AssertCheck(
         boolResult == true,
         "Verify SDL_HasPrimarySelectionText returned true, got %s",
-        boolResult ? "true" : "false");
+        (boolResult) ? "true" : "false");
     charResult = SDL_GetPrimarySelectionText();
     SDLTest_AssertCheck(
         charResult && SDL_strcmp(textRef, charResult) == 0,
@@ -551,11 +553,11 @@ static int SDLCALL clipboard_testPrimarySelectionTextFunctions(void *arg)
         clipboard_update_count - last_clipboard_update_count);
 
     /* Reset primary selection */
-    boolResult = SDL_SetPrimarySelectionText(NULL);
+    intResult = SDL_SetPrimarySelectionText(NULL);
     SDLTest_AssertCheck(
-        boolResult == true,
-        "Verify result from SDL_SetPrimarySelectionText(NULL), expected true, got %s",
-        boolResult ? "true" : "false");
+        intResult == true,
+        "Verify result from SDL_SetPrimarySelectionText(NULL), expected true, got %i",
+        intResult);
 
     /* Cleanup */
     SDL_free(textRef);

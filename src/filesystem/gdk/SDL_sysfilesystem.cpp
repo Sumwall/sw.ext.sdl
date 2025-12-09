@@ -90,6 +90,11 @@ char *SDL_SYS_GetPrefPath(const char *org, const char *app)
     HRESULT result;
     const char *csid = SDL_GetHint("SDL_GDK_SERVICE_CONFIGURATION_ID");
 
+    if (!app) {
+        SDL_InvalidParamError("app");
+        return NULL;
+    }
+
     // This should be set before calling SDL_GetPrefPath!
     if (!csid) {
         SDL_LogWarn(SDL_LOG_CATEGORY_SYSTEM, "Set SDL_GDK_SERVICE_CONFIGURATION_ID before calling SDL_GetPrefPath!");
@@ -106,7 +111,7 @@ char *SDL_SYS_GetPrefPath(const char *org, const char *app)
         return NULL;
     }
 
-    folderPath = (char *)SDL_malloc(MAX_PATH);
+    folderPath = (char*) SDL_malloc(MAX_PATH);
     do {
         result = XGameSaveFilesGetFolderWithUiResult(&block, MAX_PATH, folderPath);
     } while (result == E_PENDING);
@@ -137,12 +142,9 @@ char *SDL_SYS_GetUserFolder(SDL_Folder folder)
     return NULL;
 }
 
+// TODO
 char *SDL_SYS_GetCurrentDirectory(void)
 {
-    const char *base = SDL_GetBasePath();
-    if (!base) {
-        return NULL;
-    }
-
-    return SDL_strdup(base);
+    SDL_Unsupported();
+    return NULL;
 }

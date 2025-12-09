@@ -223,7 +223,4 @@
 /* Enable dialog subsystem */
 #define SDL_DIALOG_DUMMY 1
 
-/* Enable tray subsystem */
-#define SDL_TRAY_DUMMY 1
-
 #endif /* SDL_build_config_ios_h_ */

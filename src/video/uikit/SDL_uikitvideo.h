@@ -31,8 +31,6 @@
 
 @property(nonatomic, assign) id pasteboardObserver;
 
-@property(nonatomic, assign) bool setting_clipboard;
-
 @end
 
 #ifdef SDL_PLATFORM_VISIONOS

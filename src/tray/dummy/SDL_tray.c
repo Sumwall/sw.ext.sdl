@@ -21,7 +21,7 @@
 
 #include "SDL_internal.h"
 
-#ifdef SDL_TRAY_DUMMY
+#ifndef SDL_PLATFORM_MACOS
 
 #include "../SDL_tray_utils.h"
 
@@ -140,4 +140,4 @@ void SDL_DestroyTray(SDL_Tray *tray)
 {
 }
 
-#endif // SDL_TRAY_DUMMY
+#endif // !SDL_PLATFORM_MACOS

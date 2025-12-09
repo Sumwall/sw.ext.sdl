@@ -71,7 +71,7 @@ static Bool isUnmapNotify(Display *dpy, XEvent *ev, XPointer win) // NOLINT(read
 /*
 static Bool isConfigureNotify(Display *dpy, XEvent *ev, XPointer win)
 {
-    return ev->type == ConfigureNotify && ev->xconfigure.window == *((Window *)win);
+    return ev->type == ConfigureNotify && ev->xconfigure.window == *((Window*)win);
 }
 static Bool X11_XIfEventTimeout(Display *display, XEvent *event_return, Bool (*predicate)(), XPointer arg, int timeoutMS)
 {
@@ -398,7 +398,8 @@ static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, Window w
     } else {
         SDL_WindowData ** new_windowlist = (SDL_WindowData **)SDL_realloc(windowlist, (numwindows + 1) * sizeof(*windowlist));
         if (!new_windowlist) {
-            goto error_cleanup;
+            SDL_free(data);
+            return false;
         }
         windowlist = new_windowlist;
         windowlist[numwindows] = data;
@@ -457,42 +458,9 @@ static bool SetupWindowData(SDL_VideoDevice *_this, SDL_Window *window, Window w
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_X11_SCREEN_NUMBER, screen);
     SDL_SetNumberProperty(props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, data->xwindow);
 
-
-#if defined(SDL_VIDEO_OPENGL_ES) || defined(SDL_VIDEO_OPENGL_ES2) || defined(SDL_VIDEO_OPENGL_EGL)
-    if ((window->flags & SDL_WINDOW_OPENGL) &&
-        ((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) ||
-         SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false))
-#ifdef SDL_VIDEO_OPENGL_GLX
-        && (!_this->gl_data || X11_GL_UseEGL(_this))
-#endif
-    ) {
-#ifdef SDL_VIDEO_OPENGL_EGL
-        if (!_this->egl_data) {
-            goto error_cleanup;
-        }
-
-        // Create the GLES window surface
-        data->egl_surface = SDL_EGL_CreateSurface(_this, window, (NativeWindowType)w);
-
-        if (data->egl_surface == EGL_NO_SURFACE) {
-            SDL_SetError("Could not create GLES window surface");
-            goto error_cleanup;
-        }
-#else
-        SDL_SetError("Could not create GLES window surface (EGL support not configured)");
-        goto error_cleanup;
-#endif // SDL_VIDEO_OPENGL_EGL
-    }
-#endif
-
     // All done!
     window->internal = data;
     return true;
-
-error_cleanup:
-    X11_DestroyInputContext(data);
-    SDL_free(data);
-    return false;
 }
 
 static void SetupWindowInput(SDL_VideoDevice *_this, SDL_Window *window)
@@ -507,7 +475,7 @@ static void SetupWindowInput(SDL_VideoDevice *_this, SDL_Window *window)
     }
 #endif
 
-    X11_Xinput2Select(_this, window);
+    X11_Xinput2SelectTouch(_this, window);
 
     {
         unsigned int x11_keyboard_events = KeyPressMask | KeyReleaseMask;
@@ -889,6 +857,31 @@ bool X11_CreateWindow(SDL_VideoDevice *_this, SDL_Window *window, SDL_Properties
         X11_InitResizeSync(window);
     }
 #endif /* SDL_VIDEO_DRIVER_X11_XSYNC */
+
+#if defined(SDL_VIDEO_OPENGL_ES) || defined(SDL_VIDEO_OPENGL_ES2) || defined(SDL_VIDEO_OPENGL_EGL)
+    if ((window->flags & SDL_WINDOW_OPENGL) &&
+        ((_this->gl_config.profile_mask == SDL_GL_CONTEXT_PROFILE_ES) ||
+         SDL_GetHintBoolean(SDL_HINT_VIDEO_FORCE_EGL, false))
+#ifdef SDL_VIDEO_OPENGL_GLX
+        && (!_this->gl_data || X11_GL_UseEGL(_this))
+#endif
+    ) {
+#ifdef SDL_VIDEO_OPENGL_EGL
+        if (!_this->egl_data) {
+            return false;
+        }
+
+        // Create the GLES window surface
+        windowdata->egl_surface = SDL_EGL_CreateSurface(_this, window, (NativeWindowType)w);
+
+        if (windowdata->egl_surface == EGL_NO_SURFACE) {
+            return SDL_SetError("Could not create GLES window surface");
+        }
+#else
+        return SDL_SetError("Could not create GLES window surface (EGL support not configured)");
+#endif // SDL_VIDEO_OPENGL_EGL
+    }
+#endif
 
 #ifdef SDL_VIDEO_DRIVER_X11_XSHAPE
     // Tooltips do not receive input
@@ -1355,14 +1348,6 @@ void X11_SetWindowSize(SDL_VideoDevice *_this, SDL_Window *window)
         data->pending_operation |= X11_PENDING_OP_RESIZE;
         X11_XResizeWindow(display, data->xwindow, data->expected.w, data->expected.h);
     }
-
-    /* External windows may call this to update the renderer size, but not pump SDL events,
-     * so the size event needs to be synthesized for external windows. If it is wrong, the
-     * true size will be sent if/when events are processed.
-     */
-    if (window->flags & SDL_WINDOW_EXTERNAL) {
-        SDL_SendWindowEvent(window, SDL_EVENT_WINDOW_RESIZED, window->pending.w, window->pending.h);
-    }
 }
 
 bool X11_GetWindowBordersSize(SDL_VideoDevice *_this, SDL_Window *window, int *top, int *left, int *bottom, int *right)
@@ -1550,6 +1535,11 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
     bool set_position = false;
     XEvent event;
 
+    // If the window was previously shown, pump events to avoid possible positioning issues.
+    if (data->was_shown) {
+        X11_PumpEvents(_this);
+    }
+
     if (SDL_WINDOW_IS_POPUP(window)) {
         // Update the position in case the parent moved while we were hidden
         X11_ConstrainPopup(window, true);
@@ -1592,14 +1582,12 @@ void X11_ShowWindow(SDL_VideoDevice *_this, SDL_Window *window)
     }
 
     if (set_position) {
-        // Apply the window position, accounting for offsets due to the borders appearing.
-        const int tx = data->pending_position ? window->pending.x : window->x;
-        const int ty = data->pending_position ? window->pending.y : window->y;
+        // Apply the window position, accounting for offsets due to the borders appearing, but only when initially mapping.
+        const int tx = (data->pending_position ? window->pending.x : window->x) - (data->was_shown ? 0 : data->border_left);
+        const int ty = (data->pending_position ? window->pending.y : window->y) - (data->was_shown ? 0 : data->border_top);
         int x, y;
 
-        SDL_RelativeToGlobalForWindow(window,
-                                      tx - data->border_left, ty - data->border_top,
-                                      &x, &y);
+        SDL_RelativeToGlobalForWindow(window, tx, ty, &x, &y);
 
         data->pending_position = false;
         X11_XMoveWindow(display, data->xwindow, x, y);
@@ -2192,8 +2180,13 @@ void X11_DestroyWindow(SDL_VideoDevice *_this, SDL_Window *window)
                 }
             }
         }
-
-        X11_DestroyInputContext(data);
+#ifdef X_HAVE_UTF8_STRING
+        if (data->ic) {
+            X11_XDestroyIC(data->ic);
+            SDL_free(data->preedit_text);
+            SDL_free(data->preedit_feedback);
+        }
+#endif
 
 #ifdef SDL_VIDEO_DRIVER_X11_XSYNC
         X11_TermResizeSync(window);

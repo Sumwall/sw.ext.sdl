@@ -29,7 +29,7 @@
 
 SDL_SharedObject *SDL_LoadObject(const char *sofile)
 {
-    CHECK_PARAM(!sofile) {
+    if (!sofile) {
         SDL_InvalidParamError("sofile");
         return NULL;
     }

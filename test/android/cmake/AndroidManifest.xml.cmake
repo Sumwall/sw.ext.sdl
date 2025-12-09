@@ -44,7 +44,6 @@
         android:label="@string/label"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:enableOnBackInvokedCallback="false"
         android:hardwareAccelerated="true">
         <activity
             android:name="@ANDROID_MANIFEST_PACKAGE@.SDLTestActivity"

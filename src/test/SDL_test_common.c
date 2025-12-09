@@ -1733,12 +1733,12 @@ void SDLTest_PrintEvent(const SDL_Event *event)
         SDL_Log("SDL EVENT: Window %" SDL_PRIu32 " HDR %s", event->window.windowID, event->window.data1 ? "enabled" : "disabled");
         break;
     case SDL_EVENT_KEYBOARD_ADDED:
-        SDL_Log("SDL EVENT: Keyboard %" SDL_PRIu32 " (%s) attached",
-                event->kdevice.which, SDL_GetKeyboardNameForID(event->kdevice.which));
+        SDL_Log("SDL EVENT: Keyboard %" SDL_PRIu32 " attached",
+                event->kdevice.which);
         break;
     case SDL_EVENT_KEYBOARD_REMOVED:
-        SDL_Log("SDL EVENT: Keyboard %" SDL_PRIu32 " (%s) removed",
-                event->kdevice.which, SDL_GetKeyboardNameForID(event->kdevice.which));
+        SDL_Log("SDL EVENT: Keyboard %" SDL_PRIu32 " removed",
+                event->kdevice.which);
         break;
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: {
@@ -1775,12 +1775,12 @@ void SDLTest_PrintEvent(const SDL_Event *event)
         SDL_Log("SDL EVENT: Keymap changed");
         break;
     case SDL_EVENT_MOUSE_ADDED:
-        SDL_Log("SDL EVENT: Mouse %" SDL_PRIu32 " (%s) attached",
-                event->mdevice.which, SDL_GetMouseNameForID(event->mdevice.which));
+        SDL_Log("SDL EVENT: Mouse %" SDL_PRIu32 " attached",
+                event->mdevice.which);
         break;
     case SDL_EVENT_MOUSE_REMOVED:
-        SDL_Log("SDL EVENT: Mouse %" SDL_PRIu32 " (%s) removed",
-                event->mdevice.which, SDL_GetMouseNameForID(event->mdevice.which));
+        SDL_Log("SDL EVENT: Mouse %" SDL_PRIu32 " removed",
+                event->mdevice.which);
         break;
     case SDL_EVENT_MOUSE_MOTION:
         SDL_Log("SDL EVENT: Mouse: moved to %g,%g (%g,%g) in window %" SDL_PRIu32,
@@ -2452,57 +2452,6 @@ SDL_AppResult SDLTest_CommonEventMainCallbacks(SDLTest_CommonState *state, const
                 SDL_Window *window = SDL_GetWindowFromEvent(event);
                 if (window) {
                     SDL_FlashWindow(window, SDL_FLASH_BRIEFLY);
-                }
-            }
-            break;
-        case SDLK_P:
-            if (withAlt) {
-                /* Alt-P cycle through progress states */
-                SDL_Window *window = SDL_GetWindowFromEvent(event);
-                if (window) {
-                    const char *name;
-                    SDL_ProgressState progress_state = SDL_GetWindowProgressState(window);
-                    progress_state += 1;
-                    if (progress_state > SDL_PROGRESS_STATE_ERROR) {
-                        progress_state = SDL_PROGRESS_STATE_NONE;
-                    }
-                    switch (progress_state) {
-                    case SDL_PROGRESS_STATE_NONE:
-                        name = "NONE";
-                        break;
-                    case SDL_PROGRESS_STATE_INDETERMINATE:
-                        name = "INDETERMINATE";
-                        break;
-                    case SDL_PROGRESS_STATE_NORMAL:
-                        name = "NORMAL";
-                        break;
-                    case SDL_PROGRESS_STATE_PAUSED:
-                        name = "PAUSED";
-                        break;
-                    case SDL_PROGRESS_STATE_ERROR:
-                        name = "ERROR";
-                        break;
-                    default:
-                        name = "UNKNOWN";
-                        break;
-                    }
-                    SDL_Log("Setting progress state to %s", name);
-                    SDL_SetWindowProgressState(window, progress_state);
-                }
-            }
-            else if (withControl)
-            {
-                /* Ctrl-P increase progress value */
-                SDL_Window *window = SDL_GetWindowFromEvent(event);
-                if (window) {
-                    float progress_value = SDL_GetWindowProgressValue(window);
-                    if (withShift) {
-                        progress_value -= 0.1f;
-                    } else {
-                        progress_value += 0.1f;
-                    }
-                    SDL_Log("Setting progress value to %.1f", progress_value);
-                    SDL_SetWindowProgressValue(window, progress_value);
                 }
             }
             break;

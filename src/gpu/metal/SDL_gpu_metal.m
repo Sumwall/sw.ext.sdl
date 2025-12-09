@@ -631,7 +631,6 @@ struct MetalRenderer
     id<MTLCommandQueue> queue;
 
     bool debugMode;
-    SDL_PropertiesID props;
     Uint32 allowedFramesInFlight;
 
     MetalWindowData **claimedWindows;
@@ -754,18 +753,9 @@ static void METAL_DestroyDevice(SDL_GPUDevice *device)
     // Release the command queue
     renderer->queue = nil;
 
-    // Release properties
-    SDL_DestroyProperties(renderer->props);
-
     // Free the primary structures
     SDL_free(renderer);
     SDL_free(device);
-}
-
-static SDL_PropertiesID METAL_GetDeviceProperties(SDL_GPUDevice *device)
-{
-    MetalRenderer *renderer = (MetalRenderer *)device->driverData;
-    return renderer->props;
 }
 
 // Resource tracking
@@ -824,17 +814,6 @@ typedef struct MetalLibraryFunction
     id<MTLFunction> function;
 } MetalLibraryFunction;
 
-static bool METAL_INTERNAL_IsValidMetalLibrary(
-    const Uint8 *code,
-    size_t codeSize)
-{
-    // Metal libraries have a 4 byte header containing `MTLB`.
-    if (codeSize < 4 || code == NULL) {
-        return false;
-    }
-    return SDL_memcmp(code, "MTLB", 4) == 0;
-}
-
 // This function assumes that it's called from within an autorelease pool
 static MetalLibraryFunction METAL_INTERNAL_CompileShader(
     MetalRenderer *renderer,
@@ -863,11 +842,6 @@ static MetalLibraryFunction METAL_INTERNAL_CompileShader(
                          options:nil
                            error:&error];
     } else if (format == SDL_GPU_SHADERFORMAT_METALLIB) {
-        if (!METAL_INTERNAL_IsValidMetalLibrary(code, codeSize)) {
-            SET_STRING_ERROR_AND_RETURN(
-                "The provided shader code is not a valid Metal library!",
-                libraryFunction);
-        }
         data = dispatch_data_create(
             code,
             codeSize,
@@ -1140,7 +1114,6 @@ static SDL_GPUGraphicsPipeline *METAL_CreateGraphicsPipeline(
         // Multisample
 
         pipelineDescriptor.rasterSampleCount = SDLToMetal_SampleCount[createinfo->multisample_state.sample_count];
-        pipelineDescriptor.alphaToCoverageEnabled = createinfo->multisample_state.enable_alpha_to_coverage;
 
         // Depth Stencil
 
@@ -1805,7 +1778,8 @@ static void METAL_UploadToTexture(
                  copyFromBuffer:bufferContainer->activeBuffer->handle
                    sourceOffset:source->offset
               sourceBytesPerRow:BytesPerRow(destination->w, textureContainer->header.info.format)
-            sourceBytesPerImage:SDL_CalculateGPUTextureFormatSize(textureContainer->header.info.format, destination->w, destination->h, destination->d)
+            // sourceBytesPerImage expects the stride between 2D images (slices) of a 3D texture, not the size of the entire region
+            sourceBytesPerImage:SDL_CalculateGPUTextureFormatSize(textureContainer->header.info.format, destination->w, destination->h, 1)
                      sourceSize:MTLSizeMake(destination->w, destination->h, destination->d)
                       toTexture:metalTexture->handle
                destinationSlice:destination->layer
@@ -2319,8 +2293,6 @@ static void METAL_BeginRenderPass(
                 depthStencilTargetInfo->cycle);
 
             passDescriptor.depthAttachment.texture = texture->handle;
-            passDescriptor.depthAttachment.level = depthStencilTargetInfo->mip_level;
-            passDescriptor.depthAttachment.slice = depthStencilTargetInfo->layer;
             passDescriptor.depthAttachment.loadAction = SDLToMetal_LoadOp[depthStencilTargetInfo->load_op];
             passDescriptor.depthAttachment.storeAction = SDLToMetal_StoreOp[depthStencilTargetInfo->store_op];
             passDescriptor.depthAttachment.clearDepth = depthStencilTargetInfo->clear_depth;
@@ -2354,8 +2326,8 @@ static void METAL_BeginRenderPass(
 
         if (depthStencilTargetInfo != NULL) {
             MetalTextureContainer *container = (MetalTextureContainer *)depthStencilTargetInfo->texture;
-            Uint32 w = container->header.info.width >> depthStencilTargetInfo->mip_level;
-            Uint32 h = container->header.info.height >> depthStencilTargetInfo->mip_level;
+            Uint32 w = container->header.info.width;
+            Uint32 h = container->header.info.height;
 
             if (w < vpWidth) {
                 vpWidth = w;
@@ -3762,7 +3734,7 @@ static void METAL_ReleaseWindow(
         MetalWindowData *windowData = METAL_INTERNAL_FetchWindowData(window);
 
         if (windowData == NULL) {
-            SET_STRING_ERROR_AND_RETURN("Window is not claimed by this SDL_GPUDevice", );
+            SET_STRING_ERROR_AND_RETURN("Window is not claimed by this SDL_GpuDevice", );
         }
 
         METAL_Wait(driverData);
@@ -3841,7 +3813,7 @@ static bool METAL_INTERNAL_AcquireSwapchainTexture(
 
         windowData = METAL_INTERNAL_FetchWindowData(window);
         if (windowData == NULL) {
-            SET_STRING_ERROR_AND_RETURN("Window is not claimed by this SDL_GPUDevice", false);
+            SET_STRING_ERROR_AND_RETURN("Window is not claimed by this SDL_GpuDevice", false);
         }
 
         // Update the window size
@@ -4298,13 +4270,8 @@ static bool METAL_SupportsTextureFormat(
 
 // Device Creation
 
-static bool METAL_PrepareDriver(SDL_VideoDevice *this, SDL_PropertiesID props)
+static bool METAL_PrepareDriver(SDL_VideoDevice *this)
 {
-    if (!SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN, false) &&
-        !SDL_GetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_METALLIB_BOOLEAN, false)) {
-        return false;
-    }
-
     if (@available(macOS 10.14, iOS 13.0, tvOS 13.0, *)) {
         return (this->Metal_CreateView != NULL);
     }
@@ -4469,11 +4436,6 @@ static SDL_GPUDevice *METAL_CreateDevice(bool debugMode, bool preferLowPower, SD
         id<MTLDevice> device = NULL;
         bool hasHardwareSupport = false;
 
-        bool verboseLogs = SDL_GetBooleanProperty(
-            props,
-            SDL_PROP_GPU_DEVICE_CREATE_VERBOSE_BOOLEAN,
-            true);
-
         if (debugMode) {
             /* Due to a Metal driver quirk, once a MTLDevice has been created
              * with this environment variable set, the Metal validation layers
@@ -4527,20 +4489,12 @@ static SDL_GPUDevice *METAL_CreateDevice(bool debugMode, bool preferLowPower, SD
         renderer->device = device;
         renderer->queue = [device newCommandQueue];
 
-        renderer->props = SDL_CreateProperties();
-        if (verboseLogs) {
-            SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "SDL_GPU Driver: Metal");
-        }
-
-        // Record device name
-        const char *deviceName = [device.name UTF8String];
-        SDL_SetStringProperty(
-            renderer->props,
-            SDL_PROP_GPU_DEVICE_NAME_STRING,
-            deviceName);
-        if (verboseLogs) {
-            SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "Metal Device: %s", deviceName);
-        }
+        // Print driver info
+        SDL_LogInfo(SDL_LOG_CATEGORY_GPU, "SDL_GPU Driver: Metal");
+        SDL_LogInfo(
+            SDL_LOG_CATEGORY_GPU,
+            "Metal Device: %s",
+            [device.name UTF8String]);
 
         // Remember debug mode
         renderer->debugMode = debugMode;
@@ -4615,6 +4569,7 @@ static SDL_GPUDevice *METAL_CreateDevice(bool debugMode, bool preferLowPower, SD
 
 SDL_GPUBootstrap MetalDriver = {
     "metal",
+    SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_METALLIB,
     METAL_PrepareDriver,
     METAL_CreateDevice
 };

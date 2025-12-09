@@ -42,7 +42,6 @@ LOCAL_SRC_FILES := \
 	$(wildcard $(LOCAL_PATH)/src/haptic/*.c) \
 	$(wildcard $(LOCAL_PATH)/src/haptic/android/*.c) \
 	$(wildcard $(LOCAL_PATH)/src/haptic/dummy/*.c) \
-	$(wildcard $(LOCAL_PATH)/src/haptic/hidapi/*.c) \
 	$(wildcard $(LOCAL_PATH)/src/hidapi/*.c) \
 	$(wildcard $(LOCAL_PATH)/src/hidapi/android/*.cpp) \
 	$(wildcard $(LOCAL_PATH)/src/joystick/*.c) \
@@ -123,12 +122,6 @@ include $(BUILD_SHARED_LIBRARY)
 #
 ###########################
 
-include $(CLEAR_VARS)
-
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/include $(LOCAL_PATH)/src
-
-LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/include
-
 LOCAL_MODULE := SDL3_test
 
 LOCAL_MODULE_FILENAME := libSDL3_test
@@ -145,4 +138,24 @@ LOCAL_EXPORT_LDLIBS :=
 
 include $(BUILD_STATIC_LIBRARY)
 
+
+###########################
+#
+# SDL static library
+#
+###########################
+
+LOCAL_MODULE := SDL3_static
+
+LOCAL_MODULE_FILENAME := libSDL3
+
+LOCAL_LDLIBS :=
+
+LOCAL_LDFLAGS :=
+
+LOCAL_EXPORT_LDLIBS := -ldl -lGLESv1_CM -lGLESv2 -llog -landroid
+
+include $(BUILD_STATIC_LIBRARY)
+
 $(call import-module,android/cpufeatures)
+

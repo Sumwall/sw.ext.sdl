@@ -287,8 +287,8 @@ static void SDL_EVDEV_udev_callback(SDL_UDEV_deviceevent udev_event, int udev_cl
 }
 #endif // SDL_USE_LIBUDEV
 
-void SDL_EVDEV_SetVTSwitchCallbacks(void (*release_callback)(void *), void *release_callback_data,
-                                    void (*acquire_callback)(void *), void *acquire_callback_data)
+void SDL_EVDEV_SetVTSwitchCallbacks(void (*release_callback)(void*), void *release_callback_data,
+                                    void (*acquire_callback)(void*), void *acquire_callback_data)
 {
     SDL_EVDEV_kbd_set_vt_switch_callbacks(_this->kbd,
                                           release_callback, release_callback_data,
@@ -321,6 +321,10 @@ void SDL_EVDEV_Poll(void)
     if (!_this) {
         return;
     }
+
+#ifdef SDL_USE_LIBUDEV
+    SDL_UDEV_Poll();
+#endif
 
     SDL_EVDEV_kbd_update(_this->kbd);
 
@@ -608,14 +612,14 @@ static bool SDL_EVDEV_init_keyboard(SDL_evdevlist_item *item, int udev_class)
     name[0] = '\0';
     ioctl(item->fd, EVIOCGNAME(sizeof(name)), name);
 
-    SDL_AddKeyboard((SDL_KeyboardID)item->fd, name);
+    SDL_AddKeyboard((SDL_KeyboardID)item->fd, name, true);
 
     return true;
 }
 
 static void SDL_EVDEV_destroy_keyboard(SDL_evdevlist_item *item)
 {
-    SDL_RemoveKeyboard((SDL_KeyboardID)item->fd);
+    SDL_RemoveKeyboard((SDL_KeyboardID)item->fd, true);
 }
 
 static bool SDL_EVDEV_init_mouse(SDL_evdevlist_item *item, int udev_class)
@@ -627,7 +631,7 @@ static bool SDL_EVDEV_init_mouse(SDL_evdevlist_item *item, int udev_class)
     name[0] = '\0';
     ioctl(item->fd, EVIOCGNAME(sizeof(name)), name);
 
-    SDL_AddMouse((SDL_MouseID)item->fd, name);
+    SDL_AddMouse((SDL_MouseID)item->fd, name, true);
 
     ret = ioctl(item->fd, EVIOCGABS(ABS_X), &abs_info);
     if (ret < 0) {
@@ -652,7 +656,7 @@ static bool SDL_EVDEV_init_mouse(SDL_evdevlist_item *item, int udev_class)
 
 static void SDL_EVDEV_destroy_mouse(SDL_evdevlist_item *item)
 {
-    SDL_RemoveMouse((SDL_MouseID)item->fd);
+    SDL_RemoveMouse((SDL_MouseID)item->fd, true);
 }
 
 static bool SDL_EVDEV_init_touchscreen(SDL_evdevlist_item *item, int udev_class)

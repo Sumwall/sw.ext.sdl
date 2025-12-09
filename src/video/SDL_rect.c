@@ -31,23 +31,19 @@ bool SDL_GetSpanEnclosingRect(int width, int height,
     int span_y1, span_y2;
     int rect_y1, rect_y2;
 
-    CHECK_PARAM(width < 1) {
+    if (width < 1) {
         SDL_InvalidParamError("width");
         return false;
-    }
-    CHECK_PARAM(height < 1) {
+    } else if (height < 1) {
         SDL_InvalidParamError("height");
         return false;
-    }
-    CHECK_PARAM(!rects) {
+    } else if (!rects) {
         SDL_InvalidParamError("rects");
         return false;
-    }
-    CHECK_PARAM(!span) {
+    } else if (!span) {
         SDL_InvalidParamError("span");
         return false;
-    }
-    CHECK_PARAM(numrects < 1) {
+    } else if (numrects < 1) {
         SDL_InvalidParamError("numrects");
         return false;
     }

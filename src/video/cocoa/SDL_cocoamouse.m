@@ -374,12 +374,12 @@ bool Cocoa_InitMouse(SDL_VideoDevice *_this)
 {
     NSPoint location;
     SDL_Mouse *mouse = SDL_GetMouse();
-    SDL_MouseData *data = (SDL_MouseData *)SDL_calloc(1, sizeof(SDL_MouseData));
-    if (data == NULL) {
+    SDL_MouseData *internal = (SDL_MouseData *)SDL_calloc(1, sizeof(SDL_MouseData));
+    if (internal == NULL) {
         return false;
     }
 
-    mouse->internal = data;
+    mouse->internal = internal;
     mouse->CreateCursor = Cocoa_CreateCursor;
     mouse->CreateSystemCursor = Cocoa_CreateSystemCursor;
     mouse->ShowCursor = Cocoa_ShowCursor;
@@ -393,8 +393,8 @@ bool Cocoa_InitMouse(SDL_VideoDevice *_this)
     SDL_SetDefaultCursor(Cocoa_CreateDefaultCursor());
 
     location = [NSEvent mouseLocation];
-    data->lastMoveX = location.x;
-    data->lastMoveY = location.y;
+    internal->lastMoveX = location.x;
+    internal->lastMoveY = location.y;
     return true;
 }
 
@@ -586,6 +586,13 @@ void Cocoa_HandleMouseWarp(CGFloat x, CGFloat y)
 
 void Cocoa_QuitMouse(SDL_VideoDevice *_this)
 {
+    SDL_Mouse *mouse = SDL_GetMouse();
+    if (mouse) {
+        if (mouse->internal) {
+            SDL_free(mouse->internal);
+            mouse->internal = NULL;
+        }
+    }
 }
 
 #endif // SDL_VIDEO_DRIVER_COCOA

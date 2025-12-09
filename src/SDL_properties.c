@@ -250,10 +250,10 @@ static bool SDLCALL CopyOneProperty(void *userdata, const SDL_HashTable *table, 
 
 bool SDL_CopyProperties(SDL_PropertiesID src, SDL_PropertiesID dst)
 {
-    CHECK_PARAM(!src) {
+    if (!src) {
         return SDL_InvalidParamError("src");
     }
-    CHECK_PARAM(!dst) {
+    if (!dst) {
         return SDL_InvalidParamError("dst");
     }
 
@@ -261,11 +261,11 @@ bool SDL_CopyProperties(SDL_PropertiesID src, SDL_PropertiesID dst)
     SDL_Properties *dst_properties = NULL;
 
     SDL_FindInHashTable(SDL_properties, (const void *)(uintptr_t)src, (const void **)&src_properties);
-    CHECK_PARAM(!src_properties) {
+    if (!src_properties) {
         return SDL_InvalidParamError("src");
     }
     SDL_FindInHashTable(SDL_properties, (const void *)(uintptr_t)dst, (const void **)&dst_properties);
-    CHECK_PARAM(!dst_properties) {
+    if (!dst_properties) {
         return SDL_InvalidParamError("dst");
     }
 
@@ -287,12 +287,12 @@ bool SDL_LockProperties(SDL_PropertiesID props)
 {
     SDL_Properties *properties = NULL;
 
-    CHECK_PARAM(!props) {
+    if (!props) {
         return SDL_InvalidParamError("props");
     }
 
     SDL_FindInHashTable(SDL_properties, (const void *)(uintptr_t)props, (const void **)&properties);
-    CHECK_PARAM(!properties) {
+    if (!properties) {
         return SDL_InvalidParamError("props");
     }
 
@@ -321,17 +321,17 @@ static bool SDL_PrivateSetProperty(SDL_PropertiesID props, const char *name, SDL
     SDL_Properties *properties = NULL;
     bool result = true;
 
-    CHECK_PARAM(!props) {
+    if (!props) {
         SDL_FreePropertyWithCleanup(NULL, property, NULL, true);
         return SDL_InvalidParamError("props");
     }
-    CHECK_PARAM(!name || !*name) {
+    if (!name || !*name) {
         SDL_FreePropertyWithCleanup(NULL, property, NULL, true);
         return SDL_InvalidParamError("name");
     }
 
     SDL_FindInHashTable(SDL_properties, (const void *)(uintptr_t)props, (const void **)&properties);
-    CHECK_PARAM(!properties) {
+    if (!properties) {
         SDL_FreePropertyWithCleanup(NULL, property, NULL, true);
         return SDL_InvalidParamError("props");
     }
@@ -755,15 +755,15 @@ bool SDL_EnumerateProperties(SDL_PropertiesID props, SDL_EnumeratePropertiesCall
 {
     SDL_Properties *properties = NULL;
 
-    CHECK_PARAM(!props) {
+    if (!props) {
         return SDL_InvalidParamError("props");
     }
-    CHECK_PARAM(!callback) {
+    if (!callback) {
         return SDL_InvalidParamError("callback");
     }
 
     SDL_FindInHashTable(SDL_properties, (const void *)(uintptr_t)props, (const void **)&properties);
-    CHECK_PARAM(!properties) {
+    if (!properties) {
         return SDL_InvalidParamError("props");
     }
 

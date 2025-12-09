@@ -50,22 +50,22 @@ this should probably be removed at some point in the future.  --ryan. */
 #define SDL_PROP_TEXTURE_PARENT_POINTER "SDL.internal.texture.parent"
 
 #define CHECK_RENDERER_MAGIC_BUT_NOT_DESTROYED_FLAG(renderer, result)   \
-    CHECK_PARAM(!SDL_ObjectValid(renderer, SDL_OBJECT_TYPE_RENDERER)) { \
+    if (!SDL_ObjectValid(renderer, SDL_OBJECT_TYPE_RENDERER)) {         \
         SDL_InvalidParamError("renderer");                              \
         return result;                                                  \
     }
 
-#define CHECK_RENDERER_MAGIC(renderer, result)                          \
-    CHECK_RENDERER_MAGIC_BUT_NOT_DESTROYED_FLAG(renderer, result);      \
-    CHECK_PARAM(renderer->destroyed) {                                  \
+#define CHECK_RENDERER_MAGIC(renderer, result)                  \
+    CHECK_RENDERER_MAGIC_BUT_NOT_DESTROYED_FLAG(renderer, result); \
+    if ((renderer)->destroyed) { \
         SDL_SetError("Renderer's window has been destroyed, can't use further"); \
-        return result;                                                  \
+        return result;                                          \
     }
 
-#define CHECK_TEXTURE_MAGIC(texture, result)                            \
-    CHECK_PARAM(!SDL_ObjectValid(texture, SDL_OBJECT_TYPE_TEXTURE)) {   \
-        SDL_InvalidParamError("texture");                               \
-        return result;                                                  \
+#define CHECK_TEXTURE_MAGIC(texture, result)                    \
+    if (!SDL_ObjectValid(texture, SDL_OBJECT_TYPE_TEXTURE)) {   \
+        SDL_InvalidParamError("texture");                       \
+        return result;                                          \
     }
 
 // Predefined blend modes
@@ -119,9 +119,6 @@ static const SDL_RenderDriver *render_drivers[] = {
 #endif
 #ifdef SDL_VIDEO_RENDER_METAL
     &METAL_RenderDriver,
-#endif
-#ifdef SDL_VIDEO_RENDER_NGAGE
-    &NGAGE_RenderDriver,
 #endif
 #ifdef SDL_VIDEO_RENDER_OGL
     &GL_RenderDriver,
@@ -342,16 +339,6 @@ static bool FlushRenderCommandsIfTextureNeeded(SDL_Texture *texture)
     SDL_Renderer *renderer = texture->renderer;
     if (texture->last_command_generation == renderer->render_command_generation) {
         // the current command queue depends on this texture, flush the queue now before it changes
-        return FlushRenderCommands(renderer);
-    }
-    return true;
-}
-
-static bool FlushRenderCommandsIfGPURenderStateNeeded(SDL_GPURenderState *state)
-{
-    SDL_Renderer *renderer = state->renderer;
-    if (state->last_command_generation == renderer->render_command_generation) {
-        // the current command queue depends on this state, flush the queue now before it changes
         return FlushRenderCommands(renderer);
     }
     return true;
@@ -587,12 +574,7 @@ static SDL_RenderCommand *PrepQueueCmdDraw(SDL_Renderer *renderer, const SDL_Ren
             if (texture) {
                 cmd->data.draw.texture_scale_mode = texture->scaleMode;
             }
-            cmd->data.draw.texture_address_mode_u = SDL_TEXTURE_ADDRESS_CLAMP;
-            cmd->data.draw.texture_address_mode_v = SDL_TEXTURE_ADDRESS_CLAMP;
-            cmd->data.draw.gpu_render_state = renderer->gpu_render_state;
-            if (renderer->gpu_render_state) {
-                renderer->gpu_render_state->last_command_generation = renderer->render_command_generation;
-            }
+            cmd->data.draw.texture_address_mode = SDL_TEXTURE_ADDRESS_CLAMP;
         }
     }
     return cmd;
@@ -731,15 +713,13 @@ static bool QueueCmdGeometry(SDL_Renderer *renderer, SDL_Texture *texture,
                             const float *uv, int uv_stride,
                             int num_vertices,
                             const void *indices, int num_indices, int size_indices,
-                            float scale_x, float scale_y,
-                            SDL_TextureAddressMode texture_address_mode_u, SDL_TextureAddressMode texture_address_mode_v)
+                            float scale_x, float scale_y, SDL_TextureAddressMode texture_address_mode)
 {
     SDL_RenderCommand *cmd;
     bool result = false;
     cmd = PrepQueueCmdDraw(renderer, SDL_RENDERCMD_GEOMETRY, texture);
     if (cmd) {
-        cmd->data.draw.texture_address_mode_u = texture_address_mode_u;
-        cmd->data.draw.texture_address_mode_v = texture_address_mode_v;
+        cmd->data.draw.texture_address_mode = texture_address_mode;
         result = renderer->QueueGeometry(renderer, cmd, texture,
                                          xy, xy_stride,
                                          color, color_stride, uv, uv_stride,
@@ -832,7 +812,7 @@ int SDL_GetNumRenderDrivers(void)
 const char *SDL_GetRenderDriver(int index)
 {
 #ifndef SDL_RENDER_DISABLED
-    CHECK_PARAM(index < 0 || index >= SDL_GetNumRenderDrivers()) {
+    if (index < 0 || index >= SDL_GetNumRenderDrivers()) {
         SDL_InvalidParamError("index");
         return NULL;
     }
@@ -885,16 +865,17 @@ static bool SDL_RendererEventWatch(void *userdata, SDL_Event *event)
 
 bool SDL_CreateWindowAndRenderer(const char *title, int width, int height, SDL_WindowFlags window_flags, SDL_Window **window, SDL_Renderer **renderer)
 {
-    CHECK_PARAM(!window) {
+    bool hidden = (window_flags & SDL_WINDOW_HIDDEN) != 0;
+
+    if (!window) {
         return SDL_InvalidParamError("window");
     }
 
-    CHECK_PARAM(!renderer) {
+    if (!renderer) {
         return SDL_InvalidParamError("renderer");
     }
 
     // Hide the window so if the renderer recreates it, we don't get a visual flash on screen
-    bool hidden = (window_flags & SDL_WINDOW_HIDDEN) != 0;
     window_flags |= SDL_WINDOW_HIDDEN;
     *window = SDL_CreateWindow(title, width, height, window_flags);
     if (!*window) {
@@ -984,21 +965,6 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
     const char *hint;
     SDL_PropertiesID new_props;
 
-    CHECK_PARAM((!window && !surface) || (window && surface)) {
-        SDL_InvalidParamError("window");
-        return NULL;
-    }
-
-    CHECK_PARAM(window && SDL_WindowHasSurface(window)) {
-        SDL_SetError("Surface already associated with window");
-        return NULL;
-    }
-
-    CHECK_PARAM(window && SDL_GetRenderer(window)) {
-        SDL_SetError("Renderer already associated with window");
-        return NULL;
-    }
-
 #ifdef SDL_PLATFORM_ANDROID
     if (!Android_WaitActiveAndLockActivity()) {
         return NULL;
@@ -1011,6 +977,21 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
     }
 
     SDL_SetObjectValid(renderer, SDL_OBJECT_TYPE_RENDERER, true);
+
+    if ((!window && !surface) || (window && surface)) {
+        SDL_InvalidParamError("window");
+        goto error;
+    }
+
+    if (window && SDL_WindowHasSurface(window)) {
+        SDL_SetError("Surface already associated with window");
+        goto error;
+    }
+
+    if (window && SDL_GetRenderer(window)) {
+        SDL_SetError("Renderer already associated with window");
+        goto error;
+    }
 
     hint = SDL_GetHint(SDL_HINT_RENDER_VSYNC);
     if (hint && *hint) {
@@ -1062,9 +1043,7 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
             }
         }
 
-        if (rc) {
-            SDL_DebugLogBackend("render", renderer->name);
-        } else {
+        if (!rc) {
             if (driver_name) {
                 SDL_SetError("%s not available", driver_name);
             } else {
@@ -1107,8 +1086,6 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
         renderer->line_method = SDL_GetRenderLineMethod();
     }
 
-    renderer->scale_mode = SDL_SCALEMODE_LINEAR;
-
     renderer->SDR_white_point = 1.0f;
     renderer->HDR_headroom = 1.0f;
     renderer->desired_color_scale = 1.0f;
@@ -1146,16 +1123,8 @@ SDL_Renderer *SDL_CreateRendererWithProperties(SDL_PropertiesID props)
         SDL_AddWindowEventWatch(SDL_WINDOW_EVENT_WATCH_NORMAL, SDL_RendererEventWatch, renderer);
     }
 
-#ifdef SDL_PLATFORM_EMSCRIPTEN  // don't change vsync on Emscripten unless explicitly requested; we already set this with a mainloop, and a 0 default causes problems here.
-    if (SDL_HasProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER)) {
-        const int vsync = (int)SDL_GetNumberProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, 0);
-        SDL_SetRenderVSync(renderer, vsync);
-    }
-#else  // everything else defaults to no vsync if not requested.
-    const int vsync = (int)SDL_GetNumberProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, 0);
+    int vsync = (int)SDL_GetNumberProperty(props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, 0);
     SDL_SetRenderVSync(renderer, vsync);
-#endif
-
     SDL_CalculateSimulatedVSyncInterval(renderer, window);
 
     SDL_LogInfo(SDL_LOG_CATEGORY_RENDER,
@@ -1199,43 +1168,12 @@ SDL_Renderer *SDL_CreateRenderer(SDL_Window *window, const char *name)
     return renderer;
 }
 
-SDL_Renderer *SDL_CreateGPURenderer(SDL_Window *window, SDL_GPUShaderFormat format_flags, SDL_GPUDevice **device)
-{
-    CHECK_PARAM(!device) {
-        SDL_InvalidParamError("device");
-        return NULL;
-    }
-
-    *device = NULL;
-    SDL_Renderer *renderer;
-
-    SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_SetPointerProperty(props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window);
-    if (format_flags & SDL_GPU_SHADERFORMAT_SPIRV) {
-        SDL_SetBooleanProperty(props, SDL_PROP_RENDERER_CREATE_GPU_SHADERS_SPIRV_BOOLEAN, true);
-    }
-    if (format_flags & SDL_GPU_SHADERFORMAT_DXIL) {
-        SDL_SetBooleanProperty(props, SDL_PROP_RENDERER_CREATE_GPU_SHADERS_DXIL_BOOLEAN, true);
-    }
-    if (format_flags & SDL_GPU_SHADERFORMAT_MSL) {
-        SDL_SetBooleanProperty(props, SDL_PROP_RENDERER_CREATE_GPU_SHADERS_MSL_BOOLEAN, true);
-    }
-    SDL_SetStringProperty(props, SDL_PROP_RENDERER_CREATE_NAME_STRING, "gpu");
-
-    renderer = SDL_CreateRendererWithProperties(props);
-    if (renderer) {
-        *device = (SDL_GPUDevice *)SDL_GetPointerProperty(SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_GPU_DEVICE_POINTER, NULL);
-    }
-    SDL_DestroyProperties(props);
-    return renderer;
-}
-
 SDL_Renderer *SDL_CreateSoftwareRenderer(SDL_Surface *surface)
 {
 #ifdef SDL_VIDEO_RENDER_SW
     SDL_Renderer *renderer;
 
-    CHECK_PARAM(!surface) {
+    if (!surface) {
         SDL_InvalidParamError("surface");
         return NULL;
     }
@@ -1416,21 +1354,22 @@ SDL_Texture *SDL_CreateTextureWithProperties(SDL_Renderer *renderer, SDL_Propert
     if (!format) {
         format = renderer->texture_formats[0];
     }
-
-    CHECK_PARAM(SDL_BYTESPERPIXEL(format) == 0) {
+    if (SDL_BYTESPERPIXEL(format) == 0) {
         SDL_SetError("Invalid texture format");
         return NULL;
     }
-    CHECK_PARAM(SDL_ISPIXELFORMAT_INDEXED(format) && !IsSupportedFormat(renderer, format)) {
-        SDL_SetError("Palettized textures are not supported");
-        return NULL;
+    if (SDL_ISPIXELFORMAT_INDEXED(format)) {
+        if (!IsSupportedFormat(renderer, format)) {
+            SDL_SetError("Palettized textures are not supported");
+            return NULL;
+        }
     }
-    CHECK_PARAM(w <= 0 || h <= 0) {
+    if (w <= 0 || h <= 0) {
         SDL_SetError("Texture dimensions can't be 0");
         return NULL;
     }
     int max_texture_size = (int)SDL_GetNumberProperty(SDL_GetRendererProperties(renderer), SDL_PROP_RENDERER_MAX_TEXTURE_SIZE_NUMBER, 0);
-    CHECK_PARAM(max_texture_size && (w > max_texture_size || h > max_texture_size)) {
+    if (max_texture_size && (w > max_texture_size || h > max_texture_size)) {
         SDL_SetError("Texture dimensions are limited to %dx%d", max_texture_size, max_texture_size);
         return NULL;
     }
@@ -1453,7 +1392,7 @@ SDL_Texture *SDL_CreateTextureWithProperties(SDL_Renderer *renderer, SDL_Propert
     texture->color.b = 1.0f;
     texture->color.a = 1.0f;
     texture->blendMode = SDL_ISPIXELFORMAT_ALPHA(format) ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE;
-    texture->scaleMode = renderer->scale_mode;
+    texture->scaleMode = SDL_SCALEMODE_LINEAR;
     texture->view.pixel_w = w;
     texture->view.pixel_h = h;
     texture->view.viewport.w = -1;
@@ -1697,7 +1636,7 @@ SDL_Texture *SDL_CreateTextureFromSurface(SDL_Renderer *renderer, SDL_Surface *s
 
     CHECK_RENDERER_MAGIC(renderer, NULL);
 
-    CHECK_PARAM(!SDL_SurfaceValid(surface)) {
+    if (!SDL_SurfaceValid(surface)) {
         SDL_InvalidParamError("SDL_CreateTextureFromSurface(): surface");
         return NULL;
     }
@@ -1993,7 +1932,7 @@ bool SDL_SetTextureBlendMode(SDL_Texture *texture, SDL_BlendMode blendMode)
 
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(blendMode == SDL_BLENDMODE_INVALID) {
+    if (blendMode == SDL_BLENDMODE_INVALID) {
         return SDL_InvalidParamError("blendMode");
     }
 
@@ -2026,12 +1965,8 @@ bool SDL_SetTextureScaleMode(SDL_Texture *texture, SDL_ScaleMode scaleMode)
 {
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    switch (scaleMode) {
-    case SDL_SCALEMODE_NEAREST:
-    case SDL_SCALEMODE_LINEAR:
-    case SDL_SCALEMODE_PIXELART:
-        break;
-    default:
+    if (scaleMode != SDL_SCALEMODE_NEAREST &&
+        scaleMode != SDL_SCALEMODE_LINEAR) {
         return SDL_InvalidParamError("scaleMode");
     }
 
@@ -2063,7 +1998,6 @@ static bool SDL_UpdateTextureYUV(SDL_Texture *texture, const SDL_Rect *rect,
 {
     SDL_Texture *native = texture->native;
     SDL_Rect full_rect;
-    bool result = true;
 
     if (!SDL_SW_UpdateYUVTexture(texture->yuv, rect, pixels, pitch)) {
         return false;
@@ -2083,7 +2017,8 @@ static bool SDL_UpdateTextureYUV(SDL_Texture *texture, const SDL_Rect *rect,
         if (!SDL_LockTexture(native, rect, &native_pixels, &native_pitch)) {
             return false;
         }
-        result = SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format, rect->w, rect->h, native_pixels, native_pitch);
+        SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format,
+                            rect->w, rect->h, native_pixels, native_pitch);
         SDL_UnlockTexture(native);
     } else {
         // Use a temporary buffer for updating
@@ -2094,14 +2029,13 @@ static bool SDL_UpdateTextureYUV(SDL_Texture *texture, const SDL_Rect *rect,
             if (!temp_pixels) {
                 return false;
             }
-            result = SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format, rect->w, rect->h, temp_pixels, temp_pitch);
-            if (result) {
-                SDL_UpdateTexture(native, rect, temp_pixels, temp_pitch);
-            }
+            SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format,
+                                rect->w, rect->h, temp_pixels, temp_pitch);
+            SDL_UpdateTexture(native, rect, temp_pixels, temp_pitch);
             SDL_free(temp_pixels);
         }
     }
-    return result;
+    return true;
 }
 #endif // SDL_HAVE_YUV
 
@@ -2151,10 +2085,10 @@ bool SDL_UpdateTexture(SDL_Texture *texture, const SDL_Rect *rect, const void *p
 
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(!pixels) {
+    if (!pixels) {
         return SDL_InvalidParamError("pixels");
     }
-    CHECK_PARAM(!pitch) {
+    if (!pitch) {
         return SDL_InvalidParamError("pitch");
     }
 
@@ -2193,7 +2127,6 @@ static bool SDL_UpdateTextureYUVPlanar(SDL_Texture *texture, const SDL_Rect *rec
 {
     SDL_Texture *native = texture->native;
     SDL_Rect full_rect;
-    bool result = true;
 
     if (!SDL_SW_UpdateYUVTexturePlanar(texture->yuv, rect, Yplane, Ypitch, Uplane, Upitch, Vplane, Vpitch)) {
         return false;
@@ -2217,7 +2150,8 @@ static bool SDL_UpdateTextureYUVPlanar(SDL_Texture *texture, const SDL_Rect *rec
         if (!SDL_LockTexture(native, rect, &native_pixels, &native_pitch)) {
             return false;
         }
-        result = SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format, rect->w, rect->h, native_pixels, native_pitch);
+        SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format,
+                            rect->w, rect->h, native_pixels, native_pitch);
         SDL_UnlockTexture(native);
     } else {
         // Use a temporary buffer for updating
@@ -2228,14 +2162,13 @@ static bool SDL_UpdateTextureYUVPlanar(SDL_Texture *texture, const SDL_Rect *rec
             if (!temp_pixels) {
                 return false;
             }
-            result = SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format, rect->w, rect->h, temp_pixels, temp_pitch);
-            if (result) {
-                SDL_UpdateTexture(native, rect, temp_pixels, temp_pitch);
-            }
+            SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format,
+                                rect->w, rect->h, temp_pixels, temp_pitch);
+            SDL_UpdateTexture(native, rect, temp_pixels, temp_pitch);
             SDL_free(temp_pixels);
         }
     }
-    return result;
+    return true;
 }
 
 static bool SDL_UpdateTextureNVPlanar(SDL_Texture *texture, const SDL_Rect *rect,
@@ -2244,7 +2177,6 @@ static bool SDL_UpdateTextureNVPlanar(SDL_Texture *texture, const SDL_Rect *rect
 {
     SDL_Texture *native = texture->native;
     SDL_Rect full_rect;
-    bool result = true;
 
     if (!SDL_SW_UpdateNVTexturePlanar(texture->yuv, rect, Yplane, Ypitch, UVplane, UVpitch)) {
         return false;
@@ -2268,7 +2200,8 @@ static bool SDL_UpdateTextureNVPlanar(SDL_Texture *texture, const SDL_Rect *rect
         if (!SDL_LockTexture(native, rect, &native_pixels, &native_pitch)) {
             return false;
         }
-        result = SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format, rect->w, rect->h, native_pixels, native_pitch);
+        SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format,
+                            rect->w, rect->h, native_pixels, native_pitch);
         SDL_UnlockTexture(native);
     } else {
         // Use a temporary buffer for updating
@@ -2279,14 +2212,13 @@ static bool SDL_UpdateTextureNVPlanar(SDL_Texture *texture, const SDL_Rect *rect
             if (!temp_pixels) {
                 return false;
             }
-            result = SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format, rect->w, rect->h, temp_pixels, temp_pitch);
-            if (result) {
-                SDL_UpdateTexture(native, rect, temp_pixels, temp_pitch);
-            }
+            SDL_SW_CopyYUVToRGB(texture->yuv, rect, native->format,
+                                rect->w, rect->h, temp_pixels, temp_pitch);
+            SDL_UpdateTexture(native, rect, temp_pixels, temp_pitch);
             SDL_free(temp_pixels);
         }
     }
-    return result;
+    return true;
 }
 
 #endif // SDL_HAVE_YUV
@@ -2302,27 +2234,27 @@ bool SDL_UpdateYUVTexture(SDL_Texture *texture, const SDL_Rect *rect,
 
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(!Yplane) {
+    if (!Yplane) {
         return SDL_InvalidParamError("Yplane");
     }
-    CHECK_PARAM(!Ypitch) {
+    if (!Ypitch) {
         return SDL_InvalidParamError("Ypitch");
     }
-    CHECK_PARAM(!Uplane) {
+    if (!Uplane) {
         return SDL_InvalidParamError("Uplane");
     }
-    CHECK_PARAM(!Upitch) {
+    if (!Upitch) {
         return SDL_InvalidParamError("Upitch");
     }
-    CHECK_PARAM(!Vplane) {
+    if (!Vplane) {
         return SDL_InvalidParamError("Vplane");
     }
-    CHECK_PARAM(!Vpitch) {
+    if (!Vpitch) {
         return SDL_InvalidParamError("Vpitch");
     }
 
-    CHECK_PARAM(texture->format != SDL_PIXELFORMAT_YV12 &&
-                texture->format != SDL_PIXELFORMAT_IYUV) {
+    if (texture->format != SDL_PIXELFORMAT_YV12 &&
+        texture->format != SDL_PIXELFORMAT_IYUV) {
         return SDL_SetError("Texture format must by YV12 or IYUV");
     }
 
@@ -2368,21 +2300,21 @@ bool SDL_UpdateNVTexture(SDL_Texture *texture, const SDL_Rect *rect,
 
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(!Yplane) {
+    if (!Yplane) {
         return SDL_InvalidParamError("Yplane");
     }
-    CHECK_PARAM(!Ypitch) {
+    if (!Ypitch) {
         return SDL_InvalidParamError("Ypitch");
     }
-    CHECK_PARAM(!UVplane) {
+    if (!UVplane) {
         return SDL_InvalidParamError("UVplane");
     }
-    CHECK_PARAM(!UVpitch) {
+    if (!UVpitch) {
         return SDL_InvalidParamError("UVpitch");
     }
 
-    CHECK_PARAM(texture->format != SDL_PIXELFORMAT_NV12 &&
-                texture->format != SDL_PIXELFORMAT_NV21) {
+    if (texture->format != SDL_PIXELFORMAT_NV12 &&
+        texture->format != SDL_PIXELFORMAT_NV21) {
         return SDL_SetError("Texture format must by NV12 or NV21");
     }
 
@@ -2443,7 +2375,7 @@ bool SDL_LockTexture(SDL_Texture *texture, const SDL_Rect *rect, void **pixels, 
 
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(texture->access != SDL_TEXTUREACCESS_STREAMING) {
+    if (texture->access != SDL_TEXTUREACCESS_STREAMING) {
         return SDL_SetError("SDL_LockTexture(): texture must be streaming");
     }
 
@@ -2481,10 +2413,8 @@ bool SDL_LockTextureToSurface(SDL_Texture *texture, const SDL_Rect *rect, SDL_Su
     void *pixels = NULL;
     int pitch = 0; // fix static analysis
 
-    CHECK_TEXTURE_MAGIC(texture, false);
-
-    CHECK_PARAM(!surface) {
-        return SDL_InvalidParamError("surface");
+    if (!texture || !surface) {
+        return false;
     }
 
     real_rect.x = 0;
@@ -2558,7 +2488,6 @@ void SDL_UnlockTexture(SDL_Texture *texture)
     if (texture->access != SDL_TEXTUREACCESS_STREAMING) {
         return;
     }
-
 #ifdef SDL_HAVE_YUV
     if (texture->yuv) {
         SDL_UnlockTextureYUV(texture);
@@ -2577,19 +2506,15 @@ void SDL_UnlockTexture(SDL_Texture *texture)
 
 bool SDL_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
 {
-    CHECK_RENDERER_MAGIC(renderer, false);
-
     // texture == NULL is valid and means reset the target to the window
     if (texture) {
         CHECK_TEXTURE_MAGIC(texture, false);
-
-        CHECK_PARAM(renderer != texture->renderer) {
+        if (renderer != texture->renderer) {
             return SDL_SetError("Texture was not created with this renderer");
         }
-        CHECK_PARAM(texture->access != SDL_TEXTUREACCESS_TARGET) {
+        if (texture->access != SDL_TEXTUREACCESS_TARGET) {
             return SDL_SetError("Texture not created with SDL_TEXTUREACCESS_TARGET");
         }
-
         if (texture->native) {
             // Always render to the native texture
             texture = texture->native;
@@ -2634,7 +2559,6 @@ bool SDL_SetRenderTarget(SDL_Renderer *renderer, SDL_Texture *texture)
 SDL_Texture *SDL_GetRenderTarget(SDL_Renderer *renderer)
 {
     CHECK_RENDERER_MAGIC(renderer, NULL);
-
     if (!renderer->target) {
         return NULL;
     }
@@ -2649,12 +2573,11 @@ static void UpdateLogicalPresentation(SDL_Renderer *renderer)
     const float logical_h = view->logical_h;
     int iwidth, iheight;
 
-    if (is_main_view) {
-        SDL_GetRenderOutputSize(renderer, &iwidth, &iheight);
-    } else {
-        SDL_assert(renderer->target != NULL);
+    if (!is_main_view && renderer->target) {
         iwidth = (int)renderer->target->w;
         iheight = (int)renderer->target->h;
+    } else {
+        SDL_GetRenderOutputSize(renderer, &iwidth, &iheight);
     }
 
     view->logical_src_rect.x = 0.0f;
@@ -2771,14 +2694,9 @@ bool SDL_SetRenderLogicalPresentation(SDL_Renderer *renderer, int w, int h, SDL_
     CHECK_RENDERER_MAGIC(renderer, false);
 
     SDL_RenderViewState *view = renderer->view;
-    if (mode == SDL_LOGICAL_PRESENTATION_DISABLED) {
-        view->logical_w = 0;
-        view->logical_h = 0;
-    } else {
-        view->logical_w = w;
-        view->logical_h = h;
-    }
     view->logical_presentation_mode = mode;
+    view->logical_w = w;
+    view->logical_h = h;
 
     UpdateLogicalPresentation(renderer);
 
@@ -3296,7 +3214,7 @@ bool SDL_SetRenderDrawBlendMode(SDL_Renderer *renderer, SDL_BlendMode blendMode)
 {
     CHECK_RENDERER_MAGIC(renderer, false);
 
-    CHECK_PARAM(blendMode == SDL_BLENDMODE_INVALID) {
+    if (blendMode == SDL_BLENDMODE_INVALID) {
         return SDL_InvalidParamError("blendMode");
     }
 
@@ -3376,10 +3294,9 @@ bool SDL_RenderPoints(SDL_Renderer *renderer, const SDL_FPoint *points, int coun
 
     CHECK_RENDERER_MAGIC(renderer, false);
 
-    CHECK_PARAM(!points) {
+    if (!points) {
         return SDL_InvalidParamError("SDL_RenderPoints(): points");
     }
-
     if (count < 1) {
         return true;
     }
@@ -3583,10 +3500,9 @@ bool SDL_RenderLines(SDL_Renderer *renderer, const SDL_FPoint *points, int count
 
     CHECK_RENDERER_MAGIC(renderer, false);
 
-    CHECK_PARAM(!points) {
+    if (!points) {
         return SDL_InvalidParamError("SDL_RenderLines(): points");
     }
-
     if (count < 2) {
         return true;
     }
@@ -3714,7 +3630,7 @@ bool SDL_RenderLines(SDL_Renderer *renderer, const SDL_FPoint *points, int count
             result = QueueCmdGeometry(renderer, NULL,
                                       xy, xy_stride, &renderer->color, 0 /* color_stride */, NULL, 0,
                                       num_vertices, indices, num_indices, size_indices,
-                                      1.0f, 1.0f, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
+                                      1.0f, 1.0f, SDL_TEXTURE_ADDRESS_CLAMP);
         }
 
         SDL_small_free(xy, isstack1);
@@ -3763,10 +3679,9 @@ bool SDL_RenderRects(SDL_Renderer *renderer, const SDL_FRect *rects, int count)
 
     CHECK_RENDERER_MAGIC(renderer, false);
 
-    CHECK_PARAM(!rects) {
+    if (!rects) {
         return SDL_InvalidParamError("SDL_RenderRects(): rects");
     }
-
     if (count < 1) {
         return true;
     }
@@ -3809,10 +3724,9 @@ bool SDL_RenderFillRects(SDL_Renderer *renderer, const SDL_FRect *rects, int cou
 
     CHECK_RENDERER_MAGIC(renderer, false);
 
-    CHECK_PARAM(!rects) {
+    if (!rects) {
         return SDL_InvalidParamError("SDL_RenderFillRects(): rects");
     }
-
     if (count < 1) {
         return true;
     }
@@ -3897,7 +3811,7 @@ static bool SDL_RenderTextureInternal(SDL_Renderer *renderer, SDL_Texture *textu
         result = QueueCmdGeometry(renderer, texture,
                                   xy, xy_stride, &texture->color, 0 /* color_stride */, uv, uv_stride,
                                   num_vertices, indices, num_indices, size_indices,
-                                  scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
+                                  scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP);
     } else {
         const SDL_FRect rect = { dstrect->x * scale_x, dstrect->y * scale_y, dstrect->w * scale_x, dstrect->h * scale_y };
         result = QueueCmdCopy(renderer, texture, srcrect, &rect);
@@ -3910,7 +3824,7 @@ bool SDL_RenderTexture(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_F
     CHECK_RENDERER_MAGIC(renderer, false);
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(renderer != texture->renderer) {
+    if (renderer != texture->renderer) {
         return SDL_SetError("Texture was not created with this renderer");
     }
 
@@ -3957,7 +3871,7 @@ bool SDL_RenderTextureAffine(SDL_Renderer *renderer, SDL_Texture *texture,
     CHECK_RENDERER_MAGIC(renderer, false);
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(renderer != texture->renderer) {
+    if (renderer != texture->renderer) {
         return SDL_SetError("Texture was not created with this renderer");
     }
     if (!renderer->QueueCopyEx && !renderer->QueueGeometry) {
@@ -4059,7 +3973,7 @@ bool SDL_RenderTextureAffine(SDL_Renderer *renderer, SDL_Texture *texture,
             &texture->color, 0 /* color_stride */,
             uv, uv_stride,
             num_vertices, indices, num_indices, size_indices,
-            scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP
+            scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP
         );
     }
     return result;
@@ -4080,7 +3994,7 @@ bool SDL_RenderTextureRotated(SDL_Renderer *renderer, SDL_Texture *texture,
     CHECK_RENDERER_MAGIC(renderer, false);
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(renderer != texture->renderer) {
+    if (renderer != texture->renderer) {
         return SDL_SetError("Texture was not created with this renderer");
     }
     if (!renderer->QueueCopyEx && !renderer->QueueGeometry) {
@@ -4209,7 +4123,7 @@ bool SDL_RenderTextureRotated(SDL_Renderer *renderer, SDL_Texture *texture,
         result = QueueCmdGeometry(renderer, texture,
                                   xy, xy_stride, &texture->color, 0 /* color_stride */, uv, uv_stride,
                                   num_vertices, indices, num_indices, size_indices,
-                                  scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
+                                  scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP);
     } else {
         result = QueueCmdCopyEx(renderer, texture, &real_srcrect, dstrect, angle, &real_center, flip, scale_x, scale_y);
     }
@@ -4261,8 +4175,7 @@ static bool SDL_RenderTextureTiled_Wrap(SDL_Renderer *renderer, SDL_Texture *tex
     return QueueCmdGeometry(renderer, texture,
                             xy, xy_stride, &texture->color, 0 /* color_stride */, uv, uv_stride,
                             num_vertices, indices, num_indices, size_indices,
-                            view->current_scale.x, view->current_scale.y,
-                            SDL_TEXTURE_ADDRESS_WRAP, SDL_TEXTURE_ADDRESS_WRAP);
+                            view->current_scale.x, view->current_scale.y, SDL_TEXTURE_ADDRESS_WRAP);
 }
 
 static bool SDL_RenderTextureTiled_Iterate(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_FRect *srcrect, float scale, const SDL_FRect *dstrect)
@@ -4324,11 +4237,6 @@ static bool SDL_RenderTextureTiled_Iterate(SDL_Renderer *renderer, SDL_Texture *
     return true;
 }
 
-static bool IsNPOT(int x)
-{
-    return (x <= 0) || ((x & (x - 1)) != 0);
-}
-
 bool SDL_RenderTextureTiled(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_FRect *srcrect, float scale, const SDL_FRect *dstrect)
 {
     SDL_FRect real_srcrect;
@@ -4336,11 +4244,11 @@ bool SDL_RenderTextureTiled(SDL_Renderer *renderer, SDL_Texture *texture, const 
     CHECK_RENDERER_MAGIC(renderer, false);
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(renderer != texture->renderer) {
+    if (renderer != texture->renderer) {
         return SDL_SetError("Texture was not created with this renderer");
     }
 
-    CHECK_PARAM(scale <= 0.0f) {
+    if (scale <= 0.0f) {
         return SDL_InvalidParamError("scale");
     }
 
@@ -4373,18 +4281,11 @@ bool SDL_RenderTextureTiled(SDL_Renderer *renderer, SDL_Texture *texture, const 
 
     texture->last_command_generation = renderer->render_command_generation;
 
-    bool do_wrapping = !renderer->software &&
-                        (!srcrect ||
-                            (real_srcrect.x == 0.0f && real_srcrect.y == 0.0f &&
-                             real_srcrect.w == (float)texture->w && real_srcrect.h == (float)texture->h));
-    if (do_wrapping) {
-        if (renderer->npot_texture_wrap_unsupported && (IsNPOT((int) real_srcrect.w) || IsNPOT((int) real_srcrect.h))) {
-            do_wrapping = false;
-        }
-    }
-
     // See if we can use geometry with repeating texture coordinates
-    if (do_wrapping) {
+    if (!renderer->software &&
+        (!srcrect ||
+         (real_srcrect.x == 0.0f && real_srcrect.y == 0.0f &&
+          real_srcrect.w == (float)texture->w && real_srcrect.h == (float)texture->h))) {
         return SDL_RenderTextureTiled_Wrap(renderer, texture, &real_srcrect, scale, dstrect);
     } else {
         return SDL_RenderTextureTiled_Iterate(renderer, texture, &real_srcrect, scale, dstrect);
@@ -4403,7 +4304,7 @@ bool SDL_RenderTexture9Grid(SDL_Renderer *renderer, SDL_Texture *texture, const 
     CHECK_RENDERER_MAGIC(renderer, false);
     CHECK_TEXTURE_MAGIC(texture, false);
 
-    CHECK_PARAM(renderer != texture->renderer) {
+    if (renderer != texture->renderer) {
         return SDL_SetError("Texture was not created with this renderer");
     }
 
@@ -4522,143 +4423,6 @@ bool SDL_RenderTexture9Grid(SDL_Renderer *renderer, SDL_Texture *texture, const 
     curr_dst.y = dstrect->y + dstrect->h - dst_bottom_height;
     curr_dst.h = dst_bottom_height;
     if (!SDL_RenderTexture(renderer, texture, &curr_src, &curr_dst)) {
-        return false;
-    }
-
-    return true;
-}
-
-bool SDL_RenderTexture9GridTiled(SDL_Renderer *renderer, SDL_Texture *texture, const SDL_FRect *srcrect, float left_width, float right_width, float top_height, float bottom_height, float scale, const SDL_FRect *dstrect, float tileScale)
-{
-    SDL_FRect full_src, full_dst;
-    SDL_FRect curr_src, curr_dst;
-    float dst_left_width;
-    float dst_right_width;
-    float dst_top_height;
-    float dst_bottom_height;
-
-    CHECK_RENDERER_MAGIC(renderer, false);
-    CHECK_TEXTURE_MAGIC(texture, false);
-
-    CHECK_PARAM(renderer != texture->renderer) {
-        return SDL_SetError("Texture was not created with this renderer");
-    }
-
-    if (!srcrect) {
-        full_src.x = 0;
-        full_src.y = 0;
-        full_src.w = (float)texture->w;
-        full_src.h = (float)texture->h;
-        srcrect = &full_src;
-    }
-
-    if (!dstrect) {
-        GetRenderViewportSize(renderer, &full_dst);
-        dstrect = &full_dst;
-    }
-
-    if (scale <= 0.0f || scale == 1.0f) {
-        dst_left_width = SDL_ceilf(left_width);
-        dst_right_width = SDL_ceilf(right_width);
-        dst_top_height = SDL_ceilf(top_height);
-        dst_bottom_height = SDL_ceilf(bottom_height);
-    } else {
-        dst_left_width = SDL_ceilf(left_width * scale);
-        dst_right_width = SDL_ceilf(right_width * scale);
-        dst_top_height = SDL_ceilf(top_height * scale);
-        dst_bottom_height = SDL_ceilf(bottom_height * scale);
-    }
-
-    // Center
-    curr_src.x = srcrect->x + left_width;
-    curr_src.y = srcrect->y + top_height;
-    curr_src.w = srcrect->w - left_width - right_width;
-    curr_src.h = srcrect->h - top_height - bottom_height;
-    curr_dst.x = dstrect->x + dst_left_width;
-    curr_dst.y = dstrect->y + dst_top_height;
-    curr_dst.w = dstrect->w - dst_left_width - dst_right_width;
-    curr_dst.h = dstrect->h - dst_top_height - dst_bottom_height;
-    if (!SDL_RenderTextureTiled(renderer, texture, &curr_src, tileScale, &curr_dst)) {
-        return false;
-    }
-
-    // Upper-left corner
-    curr_src.x = srcrect->x;
-    curr_src.y = srcrect->y;
-    curr_src.w = left_width;
-    curr_src.h = top_height;
-    curr_dst.x = dstrect->x;
-    curr_dst.y = dstrect->y;
-    curr_dst.w = dst_left_width;
-    curr_dst.h = dst_top_height;
-    if (!SDL_RenderTexture(renderer, texture, &curr_src, &curr_dst)) {
-        return false;
-    }
-
-    // Upper-right corner
-    curr_src.x = srcrect->x + srcrect->w - right_width;
-    curr_src.w = right_width;
-    curr_dst.x = dstrect->x + dstrect->w - dst_right_width;
-    curr_dst.w = dst_right_width;
-    if (!SDL_RenderTexture(renderer, texture, &curr_src, &curr_dst)) {
-        return false;
-    }
-
-    // Lower-right corner
-    curr_src.y = srcrect->y + srcrect->h - bottom_height;
-    curr_src.h = bottom_height;
-    curr_dst.y = dstrect->y + dstrect->h - dst_bottom_height;
-    curr_dst.h = dst_bottom_height;
-    if (!SDL_RenderTexture(renderer, texture, &curr_src, &curr_dst)) {
-        return false;
-    }
-
-    // Lower-left corner
-    curr_src.x = srcrect->x;
-    curr_src.w = left_width;
-    curr_dst.x = dstrect->x;
-    curr_dst.w = dst_left_width;
-    if (!SDL_RenderTexture(renderer, texture, &curr_src, &curr_dst)) {
-        return false;
-    }
-
-    // Left
-    curr_src.y = srcrect->y + top_height;
-    curr_src.h = srcrect->h - top_height - bottom_height;
-    curr_dst.y = dstrect->y + dst_top_height;
-    curr_dst.h = dstrect->h - dst_top_height - dst_bottom_height;
-    if (!SDL_RenderTextureTiled(renderer, texture, &curr_src, tileScale, &curr_dst)) {
-        return false;
-    }
-
-    // Right
-    curr_src.x = srcrect->x + srcrect->w - right_width;
-    curr_src.w = right_width;
-    curr_dst.x = dstrect->x + dstrect->w - dst_right_width;
-    curr_dst.w = dst_right_width;
-    if (!SDL_RenderTextureTiled(renderer, texture, &curr_src, tileScale, &curr_dst)) {
-        return false;
-    }
-
-    // Top
-    curr_src.x = srcrect->x + left_width;
-    curr_src.y = srcrect->y;
-    curr_src.w = srcrect->w - left_width - right_width;
-    curr_src.h = top_height;
-    curr_dst.x = dstrect->x + dst_left_width;
-    curr_dst.y = dstrect->y;
-    curr_dst.w = dstrect->w - dst_left_width - dst_right_width;
-    curr_dst.h = dst_top_height;
-    if (!SDL_RenderTextureTiled(renderer, texture, &curr_src, tileScale, &curr_dst)) {
-        return false;
-    }
-
-    // Bottom
-    curr_src.y = srcrect->y + srcrect->h - bottom_height;
-    curr_src.h = bottom_height;
-    curr_dst.y = dstrect->y + dstrect->h - dst_bottom_height;
-    curr_dst.h = dst_bottom_height;
-    if (!SDL_RenderTextureTiled(renderer, texture, &curr_src, tileScale, &curr_dst)) {
         return false;
     }
 
@@ -4818,7 +4582,7 @@ static bool SDLCALL SDL_SW_RenderGeometryRaw(SDL_Renderer *renderer,
             continue;
         }
 
-        /* Two triangles forming a quadrilateral,
+        /* Two triangles forming a quadialateral,
          * prev and current triangles must have exactly 2 common vertices */
         {
             int cnt = 0, j = 3;
@@ -4947,22 +4711,6 @@ static bool SDLCALL SDL_SW_RenderGeometryRaw(SDL_Renderer *renderer,
             }
         }
 
-        // Check if UVs within range
-        if (is_quad) {
-            const float *uv0_ = (const float *)((const char *)uv + A * color_stride);
-            const float *uv1_ = (const float *)((const char *)uv + B * color_stride);
-            const float *uv2_ = (const float *)((const char *)uv + C * color_stride);
-            const float *uv3_ = (const float *)((const char *)uv + C2 * color_stride);
-            if (uv0_[0] >= 0.0f && uv0_[0] <= 1.0f &&
-                uv1_[0] >= 0.0f && uv1_[0] <= 1.0f &&
-                uv2_[0] >= 0.0f && uv2_[0] <= 1.0f &&
-                uv3_[0] >= 0.0f && uv3_[0] <= 1.0f) {
-                // ok
-            } else {
-                is_quad = 0;
-            }
-        }
-
         // Start rendering rect
         if (is_quad) {
             SDL_FRect s;
@@ -5037,7 +4785,7 @@ static bool SDLCALL SDL_SW_RenderGeometryRaw(SDL_Renderer *renderer,
                 result = QueueCmdGeometry(renderer, texture,
                                           xy, xy_stride, color, color_stride, uv, uv_stride,
                                           num_vertices, prev, 3, 4,
-                                          scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
+                                          scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP);
                 if (!result) {
                     goto end;
                 }
@@ -5057,7 +4805,7 @@ static bool SDLCALL SDL_SW_RenderGeometryRaw(SDL_Renderer *renderer,
         result = QueueCmdGeometry(renderer, texture,
                                   xy, xy_stride, color, color_stride, uv, uv_stride,
                                   num_vertices, prev, 3, 4,
-                                  scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP, SDL_TEXTURE_ADDRESS_CLAMP);
+                                  scale_x, scale_y, SDL_TEXTURE_ADDRESS_CLAMP);
         if (!result) {
             goto end;
         }
@@ -5082,48 +4830,44 @@ bool SDL_RenderGeometryRaw(SDL_Renderer *renderer,
 {
     int i;
     int count = indices ? num_indices : num_vertices;
-    SDL_TextureAddressMode texture_address_mode_u;
-    SDL_TextureAddressMode texture_address_mode_v;
+    SDL_TextureAddressMode texture_address_mode;
 
     CHECK_RENDERER_MAGIC(renderer, false);
+
+    if (!renderer->QueueGeometry) {
+        return SDL_Unsupported();
+    }
 
     if (texture) {
         CHECK_TEXTURE_MAGIC(texture, false);
 
-        CHECK_PARAM(renderer != texture->renderer) {
+        if (renderer != texture->renderer) {
             return SDL_SetError("Texture was not created with this renderer");
         }
     }
 
-    CHECK_PARAM(!xy) {
+    if (!xy) {
         return SDL_InvalidParamError("xy");
     }
 
-    CHECK_PARAM(!color) {
+    if (!color) {
         return SDL_InvalidParamError("color");
     }
 
-    CHECK_PARAM(texture && !uv) {
+    if (texture && !uv) {
         return SDL_InvalidParamError("uv");
     }
 
-    (void)count;    // In case parameter checking is disabled
-    CHECK_PARAM(count % 3 != 0) {
+    if (count % 3 != 0) {
         return SDL_InvalidParamError(indices ? "num_indices" : "num_vertices");
     }
 
     if (indices) {
-        CHECK_PARAM(size_indices != 1 && size_indices != 2 && size_indices != 4) {
+        if (size_indices != 1 && size_indices != 2 && size_indices != 4) {
             return SDL_InvalidParamError("size_indices");
         }
-    }
-
-    if (!indices) {
+    } else {
         size_indices = 0;
-    }
-
-    if (!renderer->QueueGeometry) {
-        return SDL_Unsupported();
     }
 
 #if DONT_DRAW_WHILE_HIDDEN
@@ -5141,37 +4885,17 @@ bool SDL_RenderGeometryRaw(SDL_Renderer *renderer,
         texture = texture->native;
     }
 
-    texture_address_mode_u = renderer->texture_address_mode_u;
-    texture_address_mode_v = renderer->texture_address_mode_v;
-    if (texture &&
-        (texture_address_mode_u == SDL_TEXTURE_ADDRESS_AUTO ||
-         texture_address_mode_v == SDL_TEXTURE_ADDRESS_AUTO)) {
+    texture_address_mode = renderer->texture_address_mode;
+    if (texture_address_mode == SDL_TEXTURE_ADDRESS_AUTO && texture) {
+        texture_address_mode = SDL_TEXTURE_ADDRESS_CLAMP;
         for (i = 0; i < num_vertices; ++i) {
             const float *uv_ = (const float *)((const char *)uv + i * uv_stride);
             float u = uv_[0];
             float v = uv_[1];
-            if (u < 0.0f || u > 1.0f) {
-                if (texture_address_mode_u == SDL_TEXTURE_ADDRESS_AUTO) {
-                    texture_address_mode_u = SDL_TEXTURE_ADDRESS_WRAP;
-                    if (texture_address_mode_v != SDL_TEXTURE_ADDRESS_AUTO) {
-                        break;
-                    }
-                }
+            if (u < 0.0f || v < 0.0f || u > 1.0f || v > 1.0f) {
+                texture_address_mode = SDL_TEXTURE_ADDRESS_WRAP;
+                break;
             }
-            if (v < 0.0f || v > 1.0f) {
-                if (texture_address_mode_v == SDL_TEXTURE_ADDRESS_AUTO) {
-                    texture_address_mode_v = SDL_TEXTURE_ADDRESS_WRAP;
-                    if (texture_address_mode_u != SDL_TEXTURE_ADDRESS_AUTO) {
-                        break;
-                    }
-                }
-            }
-        }
-        if (texture_address_mode_u == SDL_TEXTURE_ADDRESS_AUTO) {
-            texture_address_mode_u = SDL_TEXTURE_ADDRESS_CLAMP;
-        }
-        if (texture_address_mode_v == SDL_TEXTURE_ADDRESS_AUTO) {
-            texture_address_mode_v = SDL_TEXTURE_ADDRESS_CLAMP;
         }
     }
 
@@ -5197,9 +4921,7 @@ bool SDL_RenderGeometryRaw(SDL_Renderer *renderer,
 
     // For the software renderer, try to reinterpret triangles as SDL_Rect
 #ifdef SDL_VIDEO_RENDER_SW
-    if (renderer->software &&
-        texture_address_mode_u == SDL_TEXTURE_ADDRESS_CLAMP &&
-        texture_address_mode_v == SDL_TEXTURE_ADDRESS_CLAMP) {
+    if (renderer->software && texture_address_mode == SDL_TEXTURE_ADDRESS_CLAMP) {
         return SDL_SW_RenderGeometryRaw(renderer, texture,
                                         xy, xy_stride, color, color_stride, uv, uv_stride, num_vertices,
                                         indices, num_indices, size_indices);
@@ -5211,36 +4933,7 @@ bool SDL_RenderGeometryRaw(SDL_Renderer *renderer,
                             xy, xy_stride, color, color_stride, uv, uv_stride,
                             num_vertices, indices, num_indices, size_indices,
                             view->current_scale.x, view->current_scale.y,
-                            texture_address_mode_u, texture_address_mode_v);
-}
-
-bool SDL_SetRenderTextureAddressMode(SDL_Renderer *renderer, SDL_TextureAddressMode u_mode, SDL_TextureAddressMode v_mode)
-{
-    CHECK_RENDERER_MAGIC(renderer, false);
-
-    renderer->texture_address_mode_u = u_mode;
-    renderer->texture_address_mode_v = v_mode;
-    return true;
-}
-
-bool SDL_GetRenderTextureAddressMode(SDL_Renderer *renderer, SDL_TextureAddressMode *u_mode, SDL_TextureAddressMode *v_mode)
-{
-    if (u_mode) {
-        *u_mode = SDL_TEXTURE_ADDRESS_INVALID;
-    }
-    if (v_mode) {
-        *v_mode = SDL_TEXTURE_ADDRESS_INVALID;
-    }
-
-    CHECK_RENDERER_MAGIC(renderer, false);
-
-    if (u_mode) {
-        *u_mode = renderer->texture_address_mode_u;
-    }
-    if (v_mode) {
-        *v_mode = renderer->texture_address_mode_v;
-    }
-    return true;
+                            texture_address_mode);
 }
 
 SDL_Surface *SDL_RenderReadPixels(SDL_Renderer *renderer, const SDL_Rect *rect)
@@ -5350,8 +5043,9 @@ bool SDL_RenderPresent(SDL_Renderer *renderer)
 
     CHECK_RENDERER_MAGIC(renderer, false);
 
-    CHECK_PARAM(renderer->target) {
-        return SDL_SetError("You can't present on a render target");
+    SDL_Texture *target = renderer->target;
+    if (target) {
+        SDL_SetRenderTarget(renderer, NULL);
     }
 
     if (renderer->transparent_window) {
@@ -5368,6 +5062,10 @@ bool SDL_RenderPresent(SDL_Renderer *renderer)
 #endif
     if (!renderer->RenderPresent(renderer)) {
         presented = false;
+    }
+
+    if (target) {
+        SDL_SetRenderTarget(renderer, target);
     }
 
     if (renderer->simulate_vsync ||
@@ -5785,7 +5483,7 @@ static bool CreateDebugTextAtlas(SDL_Renderer *renderer)
     // Convert temp surface into texture
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, atlas);
     if (texture) {
-        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_PIXELART);
+        SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
         renderer->debug_char_texture_atlas = texture;
     }
     SDL_DestroySurface(atlas);
@@ -5874,160 +5572,4 @@ bool SDL_RenderDebugTextFormat(SDL_Renderer *renderer, float x, float y, SDL_PRI
     const bool retval = SDL_RenderDebugText(renderer, x, y, str);
     SDL_free(str);
     return retval;
-}
-
-bool SDL_SetDefaultTextureScaleMode(SDL_Renderer *renderer, SDL_ScaleMode scale_mode)
-{
-    CHECK_RENDERER_MAGIC(renderer, false);
-
-    renderer->scale_mode = scale_mode;
-
-    return true;
-}
-
-bool SDL_GetDefaultTextureScaleMode(SDL_Renderer *renderer, SDL_ScaleMode *scale_mode)
-{
-    if (scale_mode) {
-        *scale_mode = SDL_SCALEMODE_LINEAR;
-    }
-
-    CHECK_RENDERER_MAGIC(renderer, false);
-
-    if (scale_mode) {
-        *scale_mode = renderer->scale_mode;
-    }
-    return true;
-}
-
-SDL_GPURenderState *SDL_CreateGPURenderState(SDL_Renderer *renderer, SDL_GPURenderStateCreateInfo *createinfo)
-{
-    CHECK_RENDERER_MAGIC(renderer, NULL);
-
-    CHECK_PARAM(!createinfo) {
-        SDL_InvalidParamError("createinfo");
-        return NULL;
-    }
-
-    CHECK_PARAM(!createinfo->fragment_shader) {
-        SDL_SetError("A fragment_shader is required");
-        return NULL;
-    }
-
-    SDL_GPUDevice *device = (SDL_GPUDevice *)SDL_GetPointerProperty(renderer->props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, NULL);
-    if (!device) {
-        SDL_SetError("Renderer isn't associated with a GPU device");
-        return NULL;
-    }
-
-    SDL_GPURenderState *state = (SDL_GPURenderState *)SDL_calloc(1, sizeof(*state));
-    if (!state) {
-        return NULL;
-    }
-
-    state->renderer = renderer;
-    state->fragment_shader = createinfo->fragment_shader;
-
-    if (createinfo->num_sampler_bindings > 0) {
-        state->sampler_bindings = (SDL_GPUTextureSamplerBinding *)SDL_calloc(createinfo->num_sampler_bindings, sizeof(*state->sampler_bindings));
-        if (!state->sampler_bindings) {
-            SDL_DestroyGPURenderState(state);
-            return NULL;
-        }
-        SDL_memcpy(state->sampler_bindings, createinfo->sampler_bindings, createinfo->num_sampler_bindings * sizeof(*state->sampler_bindings));
-        state->num_sampler_bindings = createinfo->num_sampler_bindings;
-    }
-
-    if (createinfo->num_storage_textures > 0) {
-        state->storage_textures = (SDL_GPUTexture **)SDL_calloc(createinfo->num_storage_textures, sizeof(*state->storage_textures));
-        if (!state->storage_textures) {
-            SDL_DestroyGPURenderState(state);
-            return NULL;
-        }
-        SDL_memcpy(state->storage_textures, createinfo->storage_textures, createinfo->num_storage_textures * sizeof(*state->storage_textures));
-        state->num_storage_textures = createinfo->num_storage_textures;
-    }
-
-    if (createinfo->num_storage_buffers > 0) {
-        state->storage_buffers = (SDL_GPUBuffer **)SDL_calloc(createinfo->num_storage_buffers, sizeof(*state->storage_buffers));
-        if (!state->storage_buffers) {
-            SDL_DestroyGPURenderState(state);
-            return NULL;
-        }
-        SDL_memcpy(state->storage_buffers, createinfo->storage_buffers, createinfo->num_storage_buffers * sizeof(*state->storage_buffers));
-        state->num_storage_buffers = createinfo->num_storage_buffers;
-    }
-
-    return state;
-}
-
-bool SDL_SetGPURenderStateFragmentUniforms(SDL_GPURenderState *state, Uint32 slot_index, const void *data, Uint32 length)
-{
-    if (!state) {
-        return SDL_InvalidParamError("state");
-    }
-
-    if (!FlushRenderCommandsIfGPURenderStateNeeded(state)) {
-        return false;
-    }
-
-    for (int i = 0; i < state->num_uniform_buffers; i++) {
-        SDL_GPURenderStateUniformBuffer *buffer = &state->uniform_buffers[i];
-        if (buffer->slot_index == slot_index) {
-            void *new_data = SDL_realloc(buffer->data, length);
-            if (!new_data) {
-                return false;
-            }
-            SDL_memcpy(new_data, data, length);
-            buffer->data = new_data;
-            buffer->length = length;
-            return true;
-        }
-    }
-
-    SDL_GPURenderStateUniformBuffer *buffers = (SDL_GPURenderStateUniformBuffer *)SDL_realloc(state->uniform_buffers, (state->num_uniform_buffers + 1) * sizeof(*state->uniform_buffers));
-    if (!buffers) {
-        return false;
-    }
-
-    SDL_GPURenderStateUniformBuffer *buffer = &buffers[state->num_uniform_buffers];
-    buffer->slot_index = slot_index;
-    buffer->length = length;
-    buffer->data = SDL_malloc(length);
-    if (!buffer->data) {
-        SDL_free(buffers);
-        return false;
-    }
-    SDL_memcpy(buffer->data, data, length);
-
-    state->uniform_buffers = buffers;
-    ++state->num_uniform_buffers;
-    return true;
-}
-
-bool SDL_SetRenderGPUState(SDL_Renderer *renderer, SDL_GPURenderState *state)
-{
-    CHECK_RENDERER_MAGIC(renderer, false);
-
-    renderer->gpu_render_state = state;
-    return true;
-}
-
-void SDL_DestroyGPURenderState(SDL_GPURenderState *state)
-{
-    if (!state) {
-        return;
-    }
-
-    FlushRenderCommandsIfGPURenderStateNeeded(state);
-
-    if (state->num_uniform_buffers > 0) {
-        for (int i = 0; i < state->num_uniform_buffers; i++) {
-            SDL_free(state->uniform_buffers[i].data);
-        }
-        SDL_free(state->uniform_buffers);
-    }
-    SDL_free(state->sampler_bindings);
-    SDL_free(state->storage_textures);
-    SDL_free(state->storage_buffers);
-    SDL_free(state);
 }

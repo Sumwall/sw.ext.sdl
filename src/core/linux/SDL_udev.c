@@ -36,22 +36,7 @@
 #include "SDL_evdev_capabilities.h"
 #include "../unix/SDL_poll.h"
 
-#define SDL_UDEV_FALLBACK_LIBS "libudev.so.1", "libudev.so.0" 
-
-static const char *SDL_UDEV_LIBS[] = { SDL_UDEV_FALLBACK_LIBS };
-
-#ifdef SDL_UDEV_DYNAMIC
-#define SDL_UDEV_DLNOTE_LIBS SDL_UDEV_DYNAMIC, SDL_UDEV_FALLBACK_LIBS
-#else
-#define SDL_UDEV_DLNOTE_LIBS SDL_UDEV_FALLBACK_LIBS
-#endif
-
-SDL_ELF_NOTE_DLOPEN(
-    "events-udev",
-    "Support for events through libudev",
-    SDL_ELF_NOTE_DLOPEN_PRIORITY_RECOMMENDED,
-    SDL_UDEV_DLNOTE_LIBS
-);
+static const char *SDL_UDEV_LIBS[] = { "libudev.so.1", "libudev.so.0" };
 
 static SDL_UDEV_PrivateData *_this = NULL;
 
@@ -83,7 +68,6 @@ static bool SDL_UDEV_load_syms(void)
 
     SDL_UDEV_SYM(udev_device_get_action);
     SDL_UDEV_SYM(udev_device_get_devnode);
-    SDL_UDEV_SYM(udev_device_get_driver);
     SDL_UDEV_SYM(udev_device_get_syspath);
     SDL_UDEV_SYM(udev_device_get_subsystem);
     SDL_UDEV_SYM(udev_device_get_parent_with_subsystem_devtype);
@@ -235,12 +219,12 @@ bool SDL_UDEV_Scan(void)
     return true;
 }
 
-bool SDL_UDEV_GetProductInfo(const char *device_path, struct input_id *inpid, int *class, char **driver)
+bool SDL_UDEV_GetProductInfo(const char *device_path, Uint16 *vendor, Uint16 *product, Uint16 *version, int *class)
 {
     struct stat statbuf;
     char type;
     struct udev_device *dev;
-    const char *val;
+    const char* val;
     int class_temp;
 
     if (!_this) {
@@ -269,27 +253,17 @@ bool SDL_UDEV_GetProductInfo(const char *device_path, struct input_id *inpid, in
 
     val = _this->syms.udev_device_get_property_value(dev, "ID_VENDOR_ID");
     if (val) {
-        inpid->vendor = (Uint16)SDL_strtol(val, NULL, 16);
+        *vendor = (Uint16)SDL_strtol(val, NULL, 16);
     }
 
     val = _this->syms.udev_device_get_property_value(dev, "ID_MODEL_ID");
     if (val) {
-        inpid->product = (Uint16)SDL_strtol(val, NULL, 16);
+        *product = (Uint16)SDL_strtol(val, NULL, 16);
     }
 
     val = _this->syms.udev_device_get_property_value(dev, "ID_REVISION");
     if (val) {
-        inpid->version = (Uint16)SDL_strtol(val, NULL, 16);
-    }
-
-    if (driver) {
-        val = _this->syms.udev_device_get_driver(dev);
-        if (!val) {
-            val = _this->syms.udev_device_get_property_value(dev, "ID_USB_DRIVER");
-        }
-        if (val) {
-            *driver = SDL_strdup(val);
-        }
+        *version = (Uint16)SDL_strtol(val, NULL, 16);
     }
 
     class_temp = device_class(dev);

@@ -222,7 +222,7 @@ char **SDL_GetEnvironmentVariables(SDL_Environment *env)
 {
     char **result = NULL;
 
-    CHECK_PARAM(!env) {
+    if (!env) {
         SDL_InvalidParamError("env");
         return NULL;
     }
@@ -253,13 +253,11 @@ bool SDL_SetEnvironmentVariable(SDL_Environment *env, const char *name, const ch
 {
     bool result = false;
 
-    CHECK_PARAM(!env) {
+    if (!env) {
         return SDL_InvalidParamError("env");
-    }
-    CHECK_PARAM(!name || *name == '\0' || SDL_strchr(name, '=') != NULL) {
+    } else if (!name || *name == '\0' || SDL_strchr(name, '=') != NULL) {
         return SDL_InvalidParamError("name");
-    }
-    CHECK_PARAM(!value) {
+    } else if (!value) {
         return SDL_InvalidParamError("value");
     }
 
@@ -294,10 +292,9 @@ bool SDL_UnsetEnvironmentVariable(SDL_Environment *env, const char *name)
 {
     bool result = false;
 
-    CHECK_PARAM(!env) {
+    if (!env) {
         return SDL_InvalidParamError("env");
-    }
-    CHECK_PARAM(!name || *name == '\0' || SDL_strchr(name, '=') != NULL) {
+    } else if (!name || *name == '\0' || SDL_strchr(name, '=') != NULL) {
         return SDL_InvalidParamError("name");
     }
 

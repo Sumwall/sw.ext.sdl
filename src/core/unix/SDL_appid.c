@@ -30,11 +30,11 @@ const char *SDL_GetExeName(void)
 
     // TODO: Use a fallback if BSD has no mounted procfs (OpenBSD has no procfs at all)
     if (!proc_name) {
-#if defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_FREEBSD) || defined (SDL_PLATFORM_NETBSD) || defined(SDL_PLATFORM_HURD)
+#if defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_FREEBSD) || defined (SDL_PLATFORM_NETBSD)
         static char linkfile[1024];
         int linksize;
 
-#if defined(SDL_PLATFORM_LINUX) || defined(SDL_PLATFORM_HURD)
+#if defined(SDL_PLATFORM_LINUX)
         const char *proc_path = "/proc/self/exe";
 #elif defined(SDL_PLATFORM_FREEBSD)
         const char *proc_path = "/proc/curproc/file";

@@ -45,8 +45,8 @@
 
 // handle to Avrt.dll--Vista and later!--for flagging the callback thread as "Pro Audio" (low latency).
 static HMODULE libavrt = NULL;
-typedef HANDLE (WINAPI *pfnAvSetMmThreadCharacteristicsW)(LPCWSTR, LPDWORD);
-typedef BOOL (WINAPI *pfnAvRevertMmThreadCharacteristics)(HANDLE);
+typedef HANDLE(WINAPI *pfnAvSetMmThreadCharacteristicsW)(LPCWSTR, LPDWORD);
+typedef BOOL(WINAPI *pfnAvRevertMmThreadCharacteristics)(HANDLE);
 static pfnAvSetMmThreadCharacteristicsW pAvSetMmThreadCharacteristicsW = NULL;
 static pfnAvRevertMmThreadCharacteristics pAvRevertMmThreadCharacteristics = NULL;
 
@@ -164,10 +164,21 @@ bool WASAPI_ProxyToManagementThread(ManagementThreadTask task, void *userdata, b
     return true; // successfully added (and possibly executed)!
 }
 
+static bool mgmtthrtask_AudioDeviceDisconnected(void *userdata)
+{
+    SDL_AudioDevice *device = (SDL_AudioDevice *) userdata;
+    SDL_AudioDeviceDisconnected(device);
+    UnrefPhysicalAudioDevice(device);  // make sure this lived until the task completes.
+    return true;
+}
 
 static void AudioDeviceDisconnected(SDL_AudioDevice *device)
 {
-    WASAPI_DisconnectDevice(device);
+    // don't wait on this, IMMDevice's own thread needs to return or everything will deadlock.
+    if (device) {
+        RefPhysicalAudioDevice(device);  // make sure this lives until the task completes.
+        WASAPI_ProxyToManagementThread(mgmtthrtask_AudioDeviceDisconnected, device, NULL);
+    }
 }
 
 static bool mgmtthrtask_DefaultAudioDeviceChanged(void *userdata)
@@ -340,11 +351,19 @@ static void WASAPI_DetectDevices(SDL_AudioDevice **default_playback, SDL_AudioDe
     WASAPI_ProxyToManagementThread(mgmtthrtask_DetectDevices, &data, &rc);
 }
 
+static bool mgmtthrtask_DisconnectDevice(void *userdata)
+{
+    SDL_AudioDevice *device = (SDL_AudioDevice *) userdata;
+    SDL_AudioDeviceDisconnected(device);
+    UnrefPhysicalAudioDevice(device);
+    return true;
+}
+
 void WASAPI_DisconnectDevice(SDL_AudioDevice *device)
 {
-    // don't block in here; IMMDevice's own thread needs to return or everything will deadlock.
-    if (device->hidden && SDL_CompareAndSwapAtomicInt(&device->hidden->device_disconnecting, 0, 1)) {
-        SDL_AudioDeviceDisconnected(device); // this proxies the work to the main thread now, so no point in proxying to the management thread.
+    if (SDL_CompareAndSwapAtomicInt(&device->hidden->device_disconnecting, 0, 1)) {
+        RefPhysicalAudioDevice(device); // will unref when the task ends.
+        WASAPI_ProxyToManagementThread(mgmtthrtask_DisconnectDevice, device, NULL);
     }
 }
 
@@ -731,7 +750,7 @@ static bool mgmtthrtask_PrepDevice(void *userdata)
     // Try querying IAudioClient3 if sharemode is AUDCLNT_SHAREMODE_SHARED
     if (sharemode == AUDCLNT_SHAREMODE_SHARED) {
         IAudioClient3 *client3 = NULL;
-        ret = IAudioClient_QueryInterface(client, &SDL_IID_IAudioClient3, (void **)&client3);
+        ret = IAudioClient_QueryInterface(client, &SDL_IID_IAudioClient3, (void**)&client3);
         if (SUCCEEDED(ret)) {
             UINT32 default_period_in_frames = 0;
             UINT32 fundamental_period_in_frames = 0;

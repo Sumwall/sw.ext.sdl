@@ -49,12 +49,12 @@ struct SDL_Storage
 };
 
 #define CHECK_STORAGE_MAGIC()                             \
-    CHECK_PARAM(!storage) {                               \
+    if (!storage) {                                       \
         return SDL_SetError("Invalid storage container"); \
     }
 
 #define CHECK_STORAGE_MAGIC_RET(result)            \
-    CHECK_PARAM(!storage) {                        \
+    if (!storage) {                                \
         SDL_SetError("Invalid storage container"); \
         return result;                             \
     }
@@ -118,9 +118,7 @@ SDL_Storage *SDL_OpenTitleStorage(const char *override, SDL_PropertiesID props)
             }
         }
     }
-    if (storage) {
-        SDL_DebugLogBackend("title_storage", titlebootstrap[i]->name);
-    } else {
+    if (!storage) {
         if (driver_name) {
             SDL_SetError("%s not available", driver_name);
         } else {
@@ -162,9 +160,7 @@ SDL_Storage *SDL_OpenUserStorage(const char *org, const char *app, SDL_Propertie
             }
         }
     }
-    if (storage) {
-        SDL_DebugLogBackend("user_storage", userbootstrap[i]->name);
-    } else {
+    if (!storage) {
         if (driver_name) {
             SDL_SetError("%s not available", driver_name);
         } else {
@@ -183,11 +179,11 @@ SDL_Storage *SDL_OpenStorage(const SDL_StorageInterface *iface, void *userdata)
 {
     SDL_Storage *storage;
 
-    CHECK_PARAM(!iface) {
+    if (!iface) {
         SDL_InvalidParamError("iface");
         return NULL;
     }
-    CHECK_PARAM(iface->version < sizeof(*iface)) {
+    if (iface->version < sizeof(*iface)) {
         // Update this to handle older versions of this interface
         SDL_SetError("Invalid interface, should be initialized with SDL_INIT_INTERFACE()");
         return NULL;
@@ -245,14 +241,11 @@ bool SDL_ReadStorageFile(SDL_Storage *storage, const char *path, void *destinati
 {
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!path) {
+    if (!path) {
         return SDL_InvalidParamError("path");
-    }
-    CHECK_PARAM(!ValidateStoragePath(path)) {
+    } else if (!ValidateStoragePath(path)) {
         return false;
-    }
-
-    if (!storage->iface.read_file) {
+    } else if (!storage->iface.read_file) {
         return SDL_Unsupported();
     }
 
@@ -263,14 +256,11 @@ bool SDL_WriteStorageFile(SDL_Storage *storage, const char *path, const void *so
 {
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!path) {
+    if (!path) {
         return SDL_InvalidParamError("path");
-    }
-    CHECK_PARAM(!ValidateStoragePath(path)) {
+    } else if (!ValidateStoragePath(path)) {
         return false;
-    }
-
-    if (!storage->iface.write_file) {
+    } else if (!storage->iface.write_file) {
         return SDL_Unsupported();
     }
 
@@ -281,14 +271,11 @@ bool SDL_CreateStorageDirectory(SDL_Storage *storage, const char *path)
 {
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!path) {
+    if (!path) {
         return SDL_InvalidParamError("path");
-    }
-    CHECK_PARAM(!ValidateStoragePath(path)) {
+    } else if (!ValidateStoragePath(path)) {
         return false;
-    }
-
-    if (!storage->iface.mkdir) {
+    } else if (!storage->iface.mkdir) {
         return SDL_Unsupported();
     }
 
@@ -316,14 +303,11 @@ bool SDL_RemoveStoragePath(SDL_Storage *storage, const char *path)
 {
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!path) {
+    if (!path) {
         return SDL_InvalidParamError("path");
-    }
-    CHECK_PARAM(!ValidateStoragePath(path)) {
+    } else if (!ValidateStoragePath(path)) {
         return false;
-    }
-
-    if (!storage->iface.remove) {
+    } else if (!storage->iface.remove) {
         return SDL_Unsupported();
     }
 
@@ -334,20 +318,15 @@ bool SDL_RenameStoragePath(SDL_Storage *storage, const char *oldpath, const char
 {
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!oldpath) {
+    if (!oldpath) {
         return SDL_InvalidParamError("oldpath");
-    }
-    CHECK_PARAM(!newpath) {
+    } else if (!newpath) {
         return SDL_InvalidParamError("newpath");
-    }
-
-    if (!ValidateStoragePath(oldpath)) {
+    } else if (!ValidateStoragePath(oldpath)) {
         return false;
-    }
-    if (!ValidateStoragePath(newpath)) {
+    } else if (!ValidateStoragePath(newpath)) {
         return false;
-    }
-    if (!storage->iface.rename) {
+    } else if (!storage->iface.rename) {
         return SDL_Unsupported();
     }
 
@@ -358,20 +337,15 @@ bool SDL_CopyStorageFile(SDL_Storage *storage, const char *oldpath, const char *
 {
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!oldpath) {
+    if (!oldpath) {
         return SDL_InvalidParamError("oldpath");
-    }
-    CHECK_PARAM(!newpath) {
+    } else if (!newpath) {
         return SDL_InvalidParamError("newpath");
-    }
-
-    if (!ValidateStoragePath(oldpath)) {
+    } else if (!ValidateStoragePath(oldpath)) {
         return false;
-    }
-    if (!ValidateStoragePath(newpath)) {
+    } else if (!ValidateStoragePath(newpath)) {
         return false;
-    }
-    if (!storage->iface.copy) {
+    } else if (!storage->iface.copy) {
         return SDL_Unsupported();
     }
 
@@ -389,14 +363,11 @@ bool SDL_GetStoragePathInfo(SDL_Storage *storage, const char *path, SDL_PathInfo
 
     CHECK_STORAGE_MAGIC()
 
-    CHECK_PARAM(!path) {
+    if (!path) {
         return SDL_InvalidParamError("path");
-    }
-    CHECK_PARAM(!ValidateStoragePath(path)) {
+    } else if (!ValidateStoragePath(path)) {
         return false;
-    }
-
-    if (!storage->iface.info) {
+    } else if (!storage->iface.info) {
         return SDL_Unsupported();
     }
 

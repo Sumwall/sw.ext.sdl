@@ -173,6 +173,11 @@ void *SDL_GetInternalClipboardData(SDL_VideoDevice *_this, const char *mime_type
     void *data = NULL;
 
     if (_this->clipboard_callback) {
+        if (!SDL_HasInternalClipboardData(_this, mime_type)) {
+            // The callback hasn't advertised that it can handle this mime type
+            return NULL;
+        }
+
         const void *provided_data = _this->clipboard_callback(_this->clipboard_userdata, mime_type, size);
         if (provided_data) {
             // Make a copy of it for the caller and guarantee null termination
@@ -180,6 +185,8 @@ void *SDL_GetInternalClipboardData(SDL_VideoDevice *_this, const char *mime_type
             if (data) {
                 SDL_memcpy(data, provided_data, *size);
                 SDL_memset((Uint8 *)data + *size, 0, sizeof(Uint32));
+            } else {
+                *size = 0;
             }
         }
     }
@@ -196,7 +203,7 @@ void *SDL_GetClipboardData(const char *mime_type, size_t *size)
         return NULL;
     }
 
-    CHECK_PARAM(!mime_type) {
+    if (!mime_type) {
         SDL_InvalidParamError("mime_type");
         return NULL;
     }
@@ -245,7 +252,7 @@ bool SDL_HasClipboardData(const char *mime_type)
         return SDL_UninitializedVideo();
     }
 
-    CHECK_PARAM(!mime_type) {
+    if (!mime_type) {
         return SDL_InvalidParamError("mime_type");
     }
 

@@ -220,17 +220,9 @@ static bool SW_QueueFillRects(SDL_Renderer *renderer, SDL_RenderCommand *cmd, co
 
     for (i = 0; i < count; i++, verts++, rects++) {
         verts->x = (int)rects->x;
-        verts->w = (int)rects->w;
-        if (verts->w < 0) {
-            verts->w = -verts->w;
-            verts->x -= verts->w;
-        }
         verts->y = (int)rects->y;
-        verts->h = (int)rects->h;
-        if (verts->h < 0) {
-            verts->h = -verts->h;
-            verts->y -= verts->h;
-        }
+        verts->w = SDL_max((int)rects->w, 1);
+        verts->h = SDL_max((int)rects->h, 1);
     }
 
     return true;
@@ -433,7 +425,7 @@ static bool SW_RenderCopyEx(SDL_Renderer *renderer, SDL_Surface *surface, SDL_Te
         SDLgfx_rotozoomSurfaceSizeTrig(tmp_rect.w, tmp_rect.h, angle, center,
                                        &rect_dest, &cangle, &sangle);
         src_rotated = SDLgfx_rotateSurface(src_clone, angle,
-                                           (scaleMode == SDL_SCALEMODE_NEAREST || scaleMode == SDL_SCALEMODE_PIXELART) ? 0 : 1, flip & SDL_FLIP_HORIZONTAL, flip & SDL_FLIP_VERTICAL,
+                                           (scaleMode == SDL_SCALEMODE_NEAREST) ? 0 : 1, flip & SDL_FLIP_HORIZONTAL, flip & SDL_FLIP_VERTICAL,
                                            &rect_dest, cangle, sangle, center);
         if (!src_rotated) {
             result = false;
@@ -886,9 +878,11 @@ static bool SW_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
             PrepTextureForCopy(cmd, &drawstate);
 
             // Apply viewport
-            if (drawstate.viewport && (drawstate.viewport->x || drawstate.viewport->y)) {
-                copydata->dstrect.x += drawstate.viewport->x;
-                copydata->dstrect.y += drawstate.viewport->y;
+            if (drawstate.viewport &&
+                (drawstate.viewport->x || drawstate.viewport->y) &&
+                (copydata->scale_x > 0.0f && copydata->scale_y > 0.0f)) {
+                copydata->dstrect.x += (int)(drawstate.viewport->x / copydata->scale_x);
+                copydata->dstrect.y += (int)(drawstate.viewport->y / copydata->scale_y);
             }
 
             SW_RenderCopyEx(renderer, surface, cmd->data.draw.texture, &copydata->srcrect,
@@ -933,8 +927,7 @@ static bool SW_RunCommandQueue(SDL_Renderer *renderer, SDL_RenderCommand *cmd, v
                         surface,
                         &(ptr[0].dst), &(ptr[1].dst), &(ptr[2].dst),
                         ptr[0].color, ptr[1].color, ptr[2].color,
-                        cmd->data.draw.texture_address_mode_u,
-                        cmd->data.draw.texture_address_mode_v);
+                        cmd->data.draw.texture_address_mode);
                 }
             } else {
                 GeometryFillData *ptr = (GeometryFillData *)verts;
@@ -1121,13 +1114,8 @@ bool SW_CreateRendererForSurface(SDL_Renderer *renderer, SDL_Surface *surface, S
 {
     SW_RenderData *data;
 
-    CHECK_PARAM(!SDL_SurfaceValid(surface)) {
+    if (!SDL_SurfaceValid(surface)) {
         return SDL_InvalidParamError("surface");
-    }
-
-    CHECK_PARAM(SDL_BITSPERPIXEL(surface->format) < 8 ||
-                SDL_BITSPERPIXEL(surface->format) > 32) {
-        return SDL_SetError("Unsupported surface format");
     }
 
     renderer->software = true;

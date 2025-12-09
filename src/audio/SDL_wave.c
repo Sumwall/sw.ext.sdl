@@ -813,7 +813,7 @@ static bool IMA_ADPCM_Init(WaveFile *file, size_t datalength)
 
     if (format->formattag == EXTENSIBLE_CODE) {
         /* There's no specification for this, but it's basically the same
-         * format because the extensible header has wSamplePerBlocks too.
+         * format because the extensible header has wSampePerBlocks too.
          */
     } else {
         // The Standards Update says there 'should' be 2 bytes for wSamplesPerBlock.
@@ -1853,7 +1853,7 @@ static bool WaveLoad(SDL_IOStream *src, WaveFile *file, SDL_AudioSpec *spec, Uin
 
     /* Step through all chunks and save information on the fmt, data, and fact
      * chunks. Ignore the chunks we don't know as per specification. This
-     * currently also ignores cue, list, and inst chunks.
+     * currently also ignores cue, list, and slnt chunks.
      */
     while ((Uint64)RIFFend > (Uint64)chunk->position + chunk->length + (chunk->length & 1)) {
         // Abort after too many chunks or else corrupt files may waste time.
@@ -2101,19 +2101,16 @@ bool SDL_LoadWAV_IO(SDL_IOStream *src, bool closeio, SDL_AudioSpec *spec, Uint8 
     }
 
     // Make sure we are passed a valid data source
-    CHECK_PARAM(!src) {
+    if (!src) {
         SDL_InvalidParamError("src");
         goto done;
-    }
-    CHECK_PARAM(!spec) {
+    } else if (!spec) {
         SDL_InvalidParamError("spec");
         goto done;
-    }
-    CHECK_PARAM(!audio_buf) {
+    } else if (!audio_buf) {
         SDL_InvalidParamError("audio_buf");
         goto done;
-    }
-    CHECK_PARAM(!audio_len) {
+    } else if (!audio_len) {
         SDL_InvalidParamError("audio_len");
         goto done;
     }

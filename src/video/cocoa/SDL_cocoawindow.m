@@ -765,7 +765,7 @@ static NSCursor *Cocoa_GetDesiredCursor(void)
 {
     SDL_Mouse *mouse = SDL_GetMouse();
 
-    if (mouse->cursor_visible && mouse->cur_cursor && !mouse->relative_mode) {
+    if (mouse->cursor_shown && mouse->cur_cursor && !mouse->relative_mode) {
         return (__bridge NSCursor *)mouse->cur_cursor->internal;
     }
 
@@ -1862,19 +1862,6 @@ static void Cocoa_SendMouseButtonClicks(SDL_Mouse *mouse, NSEvent *theEvent, SDL
     x = point.x;
     y = (window->h - point.y);
 
-    // On macOS 26 if you move away from a space and then back, mouse motion events will have incorrect
-    // values at the top of the screen. The global mouse position query is still correct, so we'll fall
-    // back to that until this is fixed by Apple. Mouse button events are interestingly not affected.
-    if (@available(macOS 26.0, *)) {
-        if ([_data.listener isInFullscreenSpace]) {
-            int posx = 0, posy = 0;
-            SDL_GetWindowPosition(window, &posx, &posy);
-            SDL_GetGlobalMouseState(&x, &y);
-            x -= posx;
-            y -= posy;
-        }
-    }
-
     if (NSAppKitVersionNumber >= NSAppKitVersionNumber10_13_2) {
         // Mouse grab is taken care of by the confinement rect
     } else {
@@ -2156,19 +2143,20 @@ static void Cocoa_SendMouseButtonClicks(SDL_Mouse *mouse, NSEvent *theEvent, SDL
     }
 }
 
-// NSTrackingArea is how Cocoa tells you when the mouse cursor has entered or
-//  left certain regions. We put one over our entire window so we know when
-//  it has "mouse focus."
 - (void)updateTrackingAreas
 {
     [super updateTrackingAreas];
 
-    SDL_CocoaWindowData *windata = (__bridge SDL_CocoaWindowData *)_sdlWindow->internal;
-    if (_trackingArea) {
-        [self removeTrackingArea:_trackingArea];
+    if (@available(macOS 12.0, *)) {
+        // we (currently) use the tracking areas as a workaround for older macOSes, but we might be safe everywhere...
+    } else {
+        SDL_CocoaWindowData *windata = (__bridge SDL_CocoaWindowData *)_sdlWindow->internal;
+        if (_trackingArea) {
+            [self removeTrackingArea:_trackingArea];
+        }
+        _trackingArea = [[NSTrackingArea alloc] initWithRect:[self bounds] options:NSTrackingMouseEnteredAndExited|NSTrackingActiveAlways owner:windata.listener userInfo:nil];
+        [self addTrackingArea:_trackingArea];
     }
-    _trackingArea = [[NSTrackingArea alloc] initWithRect:[self bounds] options:NSTrackingMouseEnteredAndExited|NSTrackingActiveAlways owner:windata.listener userInfo:nil];
-    [self addTrackingArea:_trackingArea];
 }
 @end
 
